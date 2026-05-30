@@ -1,62 +1,50 @@
-import { ShieldCheck, Search, CheckCircle2 } from "lucide-react";
+import { Clock, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { Logo } from "@/components/logo";
 
 export default function VerificationPage() {
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold text-slate-900">Certificate Verification</h1>
-        <p className="mt-2 text-lg text-slate-500">
-          Verify the authenticity of any certificate generated through this platform
+    <div className="h-[80vh] flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-700">
+      <div className="relative">
+        <div className="absolute inset-0 bg-violet-500/20 blur-3xl rounded-full" />
+        <Logo iconClassName="h-32 w-32 rounded-[2.5rem]" />
+      </div>
+
+      <div className="text-center space-y-4 max-w-md mx-auto">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400 text-xs font-black uppercase tracking-[0.2em]">
+          <Clock className="h-3 w-3" />
+          Under Development
+        </div>
+        <h1 className="text-5xl font-black text-foreground tracking-tight leading-tight">
+          Coming Soon
+        </h1>
+        <p className="text-lg text-muted-foreground font-medium leading-relaxed">
+          Our advanced blockchain-backed certificate verification system is currently in development.
         </p>
       </div>
 
-      <div className="max-w-2xl">
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="flex flex-col items-center text-center space-y-6">
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-50 text-violet-600 shadow-sm">
-              <ShieldCheck className="h-10 w-10" />
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="text-2xl font-bold text-slate-900">Verify a Certificate</h3>
-              <p className="text-slate-500">
-                Enter the unique verification code found at the bottom of the certificate.
-              </p>
-            </div>
+      <div className="flex items-center gap-4 pt-4">
+        <Link 
+          href="/dashboard"
+          className="flex items-center gap-2 px-8 py-4 bg-muted hover:bg-border text-foreground rounded-2xl font-bold transition-all active:scale-95 border border-border"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          Back to Dashboard
+        </Link>
+      </div>
 
-            <div className="relative w-full">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                <Search className="h-5 w-5 text-slate-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="e.g. CERT-2026-X8Y2-Z9W0"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 py-4 pl-12 pr-4 text-lg font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition"
-              />
-            </div>
-
-            <button className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white shadow-lg transition hover:bg-slate-800 active:scale-[0.98]">
-              Verify Authenticity
-            </button>
-          </div>
+      <div className="pt-12 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+        <div className="p-6 rounded-[2rem] border border-border bg-card/50 text-center space-y-2">
+          <h4 className="font-bold text-foreground">Secure Hashing</h4>
+          <p className="text-xs text-muted-foreground font-medium">Tamper-proof certificate records</p>
         </div>
-
-        {/* Info Section */}
-        <div className="mt-8 grid grid-cols-2 gap-6">
-          <div className="rounded-2xl bg-emerald-50 p-6 border border-emerald-100">
-            <CheckCircle2 className="h-8 w-8 text-emerald-600 mb-4" />
-            <h4 className="font-bold text-emerald-900 mb-1">Secure & Valid</h4>
-            <p className="text-sm text-emerald-700 leading-relaxed">
-              Every certificate contains a unique hash verified against our blockchain-backed database.
-            </p>
-          </div>
-          <div className="rounded-2xl bg-blue-50 p-6 border border-blue-100">
-            <ShieldCheck className="h-8 w-8 text-blue-600 mb-4" />
-            <h4 className="font-bold text-blue-900 mb-1">Instant Results</h4>
-            <p className="text-sm text-blue-700 leading-relaxed">
-              Employers can instantly verify credentials without contacting the issuer manually.
-            </p>
-          </div>
+        <div className="p-6 rounded-[2rem] border border-border bg-card/50 text-center space-y-2">
+          <h4 className="font-bold text-foreground">QR Integration</h4>
+          <p className="text-xs text-muted-foreground font-medium">Instant scan-to-verify functionality</p>
+        </div>
+        <div className="p-6 rounded-[2rem] border border-border bg-card/50 text-center space-y-2">
+          <h4 className="font-bold text-foreground">Public Ledger</h4>
+          <p className="text-xs text-muted-foreground font-medium">Transparent validity tracking</p>
         </div>
       </div>
     </div>

@@ -1,97 +1,181 @@
-import { History, Download, ExternalLink } from "lucide-react";
+import { getSession } from "@/lib/auth/get-session";
+import { prisma } from "@/lib/prisma";
+import { History, Download, ExternalLink, Search, FileText, Calendar } from "lucide-react";
+import { redirect } from "next/navigation";
+import Link from "next/link";
 
-const mockHistory = [
-  {
-    id: "1",
-    name: "Summer Workshop 2026",
-    date: "2026-05-28",
-    count: 45,
-    status: "Completed",
-  },
-  {
-    id: "2",
-    name: "Employee of the Month",
-    date: "2026-05-25",
-    count: 12,
-    status: "Completed",
-  },
-  {
-    id: "3",
-    name: "React Advanced Certification",
-    date: "2026-05-20",
-    count: 128,
-    status: "Completed",
-  },
-];
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string }>;
+}) {
+  const session = await getSession();
 
-export default function HistoryPage() {
+  if (!session) {
+    redirect("/login");
+  }
+
+  const { q, status } = await searchParams;
+
+  const batches = await prisma.certificateBatch.findMany({
+    where: {
+      userId: session.user.id,
+      ...(q && {
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { templateName: { contains: q, mode: "insensitive" } },
+        ],
+      }),
+      ...(status && status !== "All" && {
+        status: status,
+      }),
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold text-slate-900">Generation History</h1>
-        <p className="mt-2 text-lg text-slate-500">
-          Track and download your previous certificate batches
-        </p>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">Generation Registry</h1>
+          <p className="text-sm text-muted-foreground font-medium mt-1">
+            Audit and retrieve your historically generated certificate batches.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted border border-border rounded-xl">
+          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Batches Logged</span>
+          <div className="h-4 w-px bg-border mx-1" />
+          <span className="text-sm font-bold text-foreground leading-none">{batches.length}</span>
+        </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50/50 border-b border-slate-200">
-              <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Batch Name</th>
-              <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Date</th>
-              <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Count</th>
-              <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider">Status</th>
-              <th className="px-8 py-5 text-sm font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {mockHistory.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50/50 transition">
-                <td className="px-8 py-6">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                      <History className="h-5 w-5" />
-                    </div>
-                    <span className="font-bold text-slate-900">{item.name}</span>
-                  </div>
-                </td>
-                <td className="px-8 py-6 text-slate-500 font-medium">
-                  {new Date(item.date).toLocaleDateString()}
-                </td>
-                <td className="px-8 py-6">
-                  <span className="inline-flex items-center rounded-lg bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
-                    {item.count} Certificates
-                  </span>
-                </td>
-                <td className="px-8 py-6">
-                  <span className="inline-flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    {item.status}
-                  </span>
-                </td>
-                <td className="px-8 py-6 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition" title="Download ZIP">
-                      <Download className="h-5 w-5" />
-                    </button>
-                    <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition" title="View Details">
-                      <ExternalLink className="h-5 w-5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Filters Bar */}
+      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between p-2 rounded-2xl bg-muted border border-border">
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto p-1 no-scrollbar">
+          {["All", "Completed", "Processing", "Failed"].map((s) => {
+            const isActive = (status || "All") === s;
+            return (
+              <Link
+                key={s}
+                href={`?${new URLSearchParams({
+                  ...(q && { q }),
+                  status: s,
+                })}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  isActive
+                    ? "bg-card text-violet-600 shadow-sm ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s}
+              </Link>
+            );
+          })}
+        </div>
 
-        {mockHistory.length === 0 && (
-          <div className="py-20 text-center">
-            <History className="mx-auto h-12 w-12 text-slate-200" />
-            <h3 className="mt-4 text-lg font-bold text-slate-900">No history yet</h3>
-            <p className="mt-1 text-slate-500">Start generating certificates to see them here.</p>
+        <div className="relative w-full lg:w-80 p-1">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-        )}
+          <form>
+            <input
+              type="text"
+              name="q"
+              defaultValue={q}
+              placeholder="Filter batch registry..."
+              className="w-full rounded-xl border border-border bg-card py-2 pl-10 pr-4 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition shadow-sm"
+            />
+          </form>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Entity / Batch</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Protocol</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Unit Count</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Deployment</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right px-8">Audit</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {batches.map((batch) => (
+                <tr key={batch.id} className="hover:bg-muted/30 transition-colors group">
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 transition-transform group-hover:scale-110">
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-sm font-bold text-foreground block leading-none">{batch.name}</span>
+                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tighter opacity-60">Source: {batch.templateName}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-center">
+                    <span className="text-[10px] font-black text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border">
+                      {batch.format}
+                    </span>
+                  </td>
+                  <td className="px-6 py-5 text-center">
+                    <span className="text-sm font-bold text-foreground">
+                      {batch.count}
+                    </span>
+                  </td>
+                  <td className="px-6 py-5 text-center">
+                    <div className="flex flex-col items-center gap-1.5">
+                       <span className="text-xs font-bold text-muted-foreground tabular-nums">
+                         {new Date(batch.createdAt).toLocaleDateString()}
+                       </span>
+                       <div className="flex items-center gap-1.5">
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            batch.status === "Completed" ? "bg-emerald-500" : 
+                            batch.status === "Processing" ? "bg-blue-500 animate-pulse" : "bg-rose-500"
+                          }`} />
+                          <span className={`text-[9px] font-black uppercase tracking-widest ${
+                            batch.status === "Completed" ? "text-emerald-500" : 
+                            batch.status === "Processing" ? "text-blue-500" : "text-rose-500"
+                          }`}>
+                            {batch.status}
+                          </span>
+                       </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-right px-8">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border" title="Download Export">
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <button className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border" title="Audit Details">
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {batches.length === 0 && (
+            <div className="py-32 text-center bg-muted/10">
+              <div className="h-16 w-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-6 text-muted-foreground/20 shadow-inner">
+                <History className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground tracking-tight">Registry empty</h3>
+              <p className="mt-2 text-xs text-muted-foreground font-medium max-w-xs mx-auto leading-relaxed">
+                {q || status !== "All"
+                  ? "No historical data matched the requested filter parameters."
+                  : "Generation history is empty. Initialize a new batch to start logging registry entries."}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

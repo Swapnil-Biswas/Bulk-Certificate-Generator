@@ -1,23 +1,23 @@
 import { resend } from "@/lib/email/resend";
 
-export async function sendVerificationEmail(
+export async function sendPasswordResetEmail(
   email: string,
   token: string
 ) {
-  const verifyUrl = `http://localhost:3000/verify-email?token=${token}`;
+  const resetUrl = `http://localhost:3000/reset-password?token=${token}`;
 
   const result = await resend.emails.send({
     from: "CertGen <noreply@mail.certificategenerator.space>",
     to: email,
-    subject: "Verify your CertGen account",
+    subject: "Reset your password",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-        <h2 style="color: #0f172a; margin-bottom: 16px;">Welcome to CertGen Studio</h2>
+        <h2 style="color: #0f172a; margin-bottom: 16px;">Reset your password</h2>
         <p style="color: #64748b; font-size: 16px; line-height: 1.5; margin-bottom: 24px;">
-          Thanks for joining CertGen! Please click the button below to verify your email address and activate your design studio.
+          You requested to reset your password for your CertGen account. Click the button below to set a new password.
         </p>
         <a
-          href="${verifyUrl}"
+          href="${resetUrl}"
           style="
             display: inline-block;
             padding: 14px 28px;
@@ -29,13 +29,14 @@ export async function sendVerificationEmail(
             font-size: 14px;
           "
         >
-          Verify Email Address
+          Reset Password
         </a>
-        <p style="color: #94a3b8; font-size: 12px; margin-top: 32px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-          If you didn't create an account, you can safely ignore this email.
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 32px; border-top: 1px solid #f1f5f9; pt-16;">
+          If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.
         </p>
       </div>
     `,
   });
   console.log(result);
+  return result;
 }

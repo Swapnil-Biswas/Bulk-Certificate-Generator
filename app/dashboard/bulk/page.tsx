@@ -1,65 +1,75 @@
 import { FileSpreadsheet, ArrowRight, Upload, Download } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 
 export default function BulkGeneratePage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="max-w-3xl">
-        <h1 className="text-4xl font-bold text-slate-900">Bulk Generation</h1>
-        <p className="mt-2 text-lg text-slate-500">
+        <h1 className="text-3xl font-bold text-foreground tracking-tight">Bulk Generation</h1>
+        <p className="mt-1 text-sm text-muted-foreground font-medium">
           Generate hundreds of certificates in seconds using CSV or TXT data sources.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 max-w-4xl">
-        <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
-            <FileSpreadsheet className="h-40 w-40 text-slate-900" />
+      <div className="grid grid-cols-1 gap-6 max-w-5xl">
+        <div className="rounded-2xl border border-border bg-card p-10 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform duration-700">
+            <FileSpreadsheet className="h-64 w-64 text-violet-600" />
           </div>
 
-          <div className="relative z-10 space-y-8">
-            <div className="grid grid-cols-3 gap-6">
-              <div className="space-y-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
-                  <Upload className="h-6 w-6" />
+          <div className="relative z-10 space-y-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              <div className="space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 shadow-sm">
+                  <Upload className="h-5 w-5" />
                 </div>
-                <h3 className="font-bold text-slate-900">1. Upload Template</h3>
-                <p className="text-sm text-slate-500">Choose your base certificate image in the editor.</p>
+                <div>
+                  <h3 className="font-bold text-foreground">1. Upload Template</h3>
+                  <p className="text-xs text-muted-foreground font-medium leading-relaxed mt-1.5">Choose your base certificate image in the studio editor.</p>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
-                  <FileSpreadsheet className="h-6 w-6" />
+              <div className="space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 shadow-sm">
+                  <FileSpreadsheet className="h-5 w-5" />
                 </div>
-                <h3 className="font-bold text-slate-900">2. Import Data</h3>
-                <p className="text-sm text-slate-500">Upload a CSV or TXT file with names or other fields.</p>
+                <div>
+                  <h3 className="font-bold text-foreground">2. Import Data</h3>
+                  <p className="text-xs text-muted-foreground font-medium leading-relaxed mt-1.5">Upload a CSV or TXT file with names or other dynamic fields.</p>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
-                  <Download className="h-6 w-6" />
+              <div className="space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-sm">
+                  <Download className="h-5 w-5" />
                 </div>
-                <h3 className="font-bold text-slate-900">3. Batch Export</h3>
-                <p className="text-sm text-slate-500">Export all certificates as a high-quality ZIP archive.</p>
+                <div>
+                  <h3 className="font-bold text-foreground">3. Batch Export</h3>
+                  <p className="text-xs text-muted-foreground font-medium leading-relaxed mt-1.5">Export all certificates as a high-quality ZIP archive instantly.</p>
+                </div>
               </div>
             </div>
 
-            <div className="pt-6 border-t border-slate-100">
+            <div className="pt-8 border-t border-border">
               <Link
                 href="/dashboard/certificates"
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-bold text-white shadow-xl transition hover:bg-slate-800 active:scale-95"
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-8 py-3.5 font-bold text-white text-sm shadow-lg shadow-violet-500/20 transition hover:bg-violet-700 active:scale-95"
               >
-                Go to Certificate Editor
-                <ArrowRight className="h-5 w-5" />
+                Enter Studio Editor
+                <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 p-8">
-          <h4 className="font-bold text-slate-900 mb-2">Pro Tip: CSV Headers</h4>
-          <p className="text-sm text-slate-500 leading-relaxed">
-            Use double curly braces in your text fields (e.g., <code className="bg-white px-1.5 py-0.5 rounded border">{"{{name}}"}</code>) to match your CSV column headers. The system will automatically swap them for each row.
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-8">
+          <h4 className="font-bold text-foreground text-sm mb-2 flex items-center gap-2">
+            <Logo iconClassName="h-5 w-5" />
+            Registry Mapping Protocol
+          </h4>
+          <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+            Use double curly braces in your text layers (e.g., <code className="bg-card px-1.5 py-0.5 rounded border border-border text-violet-600 font-bold mx-1">{"{{name}}"}</code>) to match your CSV column headers. The generator will automatically swap placeholders for each entry in the registry.
           </p>
         </div>
       </div>

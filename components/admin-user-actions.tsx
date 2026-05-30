@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Trash2, Shield, Ban, ChevronDown, XCircle } from "lucide-react";
 
 type Props = {
   userId: string;
@@ -8,55 +10,83 @@ type Props = {
 
 export default function AdminUserActions({ userId }: Props) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [showPlanMenu, setShowPlanMenu] = useState(false);
 
-  async function updateUser(data: Record<string, string>) {
-    await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
+  async function updateUser(data: Record<string, any>) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
 
-    router.refresh();
+      if (res.ok) {
+        router.refresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Error: ${errorData.error || "Failed to update user"}`);
+      }
+    } catch (err) {
+      alert("Network error: Could not reach the server.");
+    } finally {
+      setLoading(false);
+      setShowPlanMenu(false);
+    }
   }
 
   async function deleteUser() {
-    await fetch(`/api/admin/users/${userId}`, {
-      method: "DELETE",
-    });
-
-    router.refresh();
+    if (!confirm("Are you sure? This is permanent.")) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        router.refresh();
+      } else {
+         alert("Delete operation failed on server.");
+      }
+    } catch (err) {
+      alert("Network error during deletion.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="mt-4 flex gap-2 flex-wrap">
-      <button
-        onClick={() => updateUser({ approvalStatus: "APPROVED" })}
-        className="rounded bg-green-600 px-3 py-2"
-      >
-        Approve
-      </button>
+    <div className="flex items-center gap-3">
+      {/* Account Status Control */}
+      <div className="flex bg-black/40 rounded-lg border border-white/5 p-0.5 shadow-inner">
+        <button
+          onClick={() => updateUser({ approvalStatus: "APPROVED" })}
+          disabled={loading}
+          className="p-1.5 rounded-md hover:bg-emerald-500/10 text-emerald-500 transition-all disabled:opacity-30"
+          title="Approve Member"
+        >
+          <Shield className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => updateUser({ approvalStatus: "BLOCKED" })}
+          disabled={loading}
+          className="p-1.5 rounded-md hover:bg-rose-500/10 text-rose-500 transition-all disabled:opacity-30"
+          title="Block Member"
+        >
+          <Ban className="h-4 w-4" />
+        </button>
+      </div>
 
-      <button
-        onClick={() => updateUser({ approvalStatus: "REJECTED" })}
-        className="rounded bg-yellow-600 px-3 py-2"
-      >
-        Reject
-      </button>
-
-      <button
-        onClick={() => updateUser({ approvalStatus: "BLOCKED" })}
-        className="rounded bg-red-600 px-3 py-2"
-      >
-        Block
-      </button>
-
+      {/* Danger Zone */}
       <button
         onClick={deleteUser}
-        className="rounded bg-zinc-700 px-3 py-2"
+        disabled={loading}
+        className="p-2 rounded-xl text-slate-700 hover:text-rose-500 hover:bg-rose-500/5 transition-all disabled:opacity-20"
+        title="Destroy Identity"
       >
-        Delete
+        <Trash2 className="h-4 w-4" />
       </button>
     </div>
   );

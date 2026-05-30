@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/get-session";
@@ -23,21 +23,27 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
-
   const body = await request.json();
+  
+  console.log(`[ADMIN API] Updating user ${id}:`, body);
+
   const { approvalStatus, role } = body;
 
-  const updatedUser = await prisma.user.update({
-    where: {
-      id,
-    },
-    data: {
-      ...(approvalStatus && { approvalStatus }),
-      ...(role && { role }),
-    },
-  });
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(approvalStatus && { approvalStatus }),
+        ...(role && { role }),
+      },
+    });
 
-  return NextResponse.json(updatedUser);
+    console.log(`[ADMIN API] Update successful for ${id}`);
+    return NextResponse.json(updatedUser);
+  } catch (error) {
+    console.error(`[ADMIN API] Update failed for ${id}:`, error);
+    return NextResponse.json({ error: "Database update failed" }, { status: 500 });
+  }
 }
 
 export async function DELETE(
@@ -55,11 +61,14 @@ export async function DELETE(
 
   const { id } = await context.params;
 
-  await prisma.user.delete({
-    where: {
-      id,
-    },
-  });
-
-  return NextResponse.json({ success: true });
+  try {
+    await prisma.user.delete({
+      where: {
+        id,
+      },
+    });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+  }
 }
