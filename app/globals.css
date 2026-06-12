@@ -62,3 +62,19 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@utility bg-grid {
+  background-image: 
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, #000 70%, transparent 100%);
+}
+
+@utility bg-spotlight {
+  background: radial-gradient(
+    600px circle at var(--x, 0px) var(--y, 0px),
+    rgba(124, 58, 237, 0.1),
+    transparent 40%
+  );
+}

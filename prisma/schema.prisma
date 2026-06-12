@@ -102,11 +102,27 @@ model CertificateBatch {
   name         String
   count        Int
   format       String   // e.g. "PNG", "PDF"
-  status       String   // e.g. "Completed", "Processing"
+  status       String   // e.g. "Completed", "Processing", "Failed"
   templateName String
+  
+  merkleRoot      String?
+  transactionHash String?
   
   createdAt    DateTime @default(now())
   
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certificates Certificate[]
+}
+
+model Certificate {
+  id          String   @id @default(cuid())
+  batchId     String
+  metadata    Json     // Specific row data (name, date, etc)
+  hash        String   @unique
+  merkleProof Json
+  status      String   @default("VALID")
+
+  batch       CertificateBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 }

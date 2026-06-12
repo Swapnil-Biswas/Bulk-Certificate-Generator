@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CertGen: Enterprise Certificate Synthesis & Verification Engine
 
-## Getting Started
+CertGen is a high-performance, full-stack Next.js application designed for the professional generation, management, and blockchain-backed verification of digital credentials. It combines a sophisticated canvas-based design studio with cryptographic anchoring on the Polygon network to ensure absolute trust and immutability.
 
-First, run the development server:
+## 🚀 Live Demo
+[certificategenerator.space](https://www.certificategenerator.space)
 
+---
+
+## ✨ Core Features
+
+### 🎨 1. High-Performance Studio Editor
+*   **Canvas-Based Design:** Powered by `React-Konva`, providing a fluid, desktop-grade design experience.
+*   **Dynamic Text Layers:** Support for multiple text fields with customizable typography, colors, and alignments.
+*   **Precision Controls:** Drag-and-drop placement, resizing, and property management for every design element.
+*   **Font Library:** Integrated with Google Fonts and FontSource for a wide range of professional styles.
+
+### 📦 2. Scalable Bulk Generation
+*   **Data Injection:** Generate hundreds of unique certificates instantly by uploading CSV or TXT registries.
+*   **Placeholder Protocol:** Use `{{name}}` placeholders in your design to automatically map data from your registry.
+*   **Batch Export:** Export your entire batch as high-quality PNG or PDF ZIP archives.
+
+### 🛡️ 3. Blockchain-Backed Verification
+*   **Polygon Anchoring:** Every batch is anchored to the Polygon blockchain using Merkle Root technology, providing immutable proof of issuance.
+*   **Dynamic QR Codes:** Automatically embed a unique verification QR code into every certificate.
+*   **Verification Portal:** A public-facing registry (`/verify/[cert_id]`) where third parties can scan and confirm the authenticity of any credential.
+*   **Cryptographic Security:** Uses SHA-256 hashing and Merkle Proofs to detect even the slightest modification to certificate data.
+
+### 🔐 4. Secure Authentication & Admin
+*   **Google OAuth:** Seamless sign-in and sign-up using the "Google Auth Engine."
+*   **Identity Management:** Full credentials-based auth with password reset and email verification flows.
+*   **Command Center:** A robust admin dashboard for managing node entities (users), approving access, and auditing global registry output.
+*   **Approval Protocol:** Multi-tier security where all new users require administrative approval before accessing the design studio.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | Next.js 16 (App Router), React 19, TailwindCSS |
+| **Backend** | Next.js API Routes, Server Actions |
+| **Database** | PostgreSQL, Prisma ORM |
+| **Authentication** | NextAuth.js (Auth.js), Google OAuth, JWT |
+| **Canvas Engine** | Konva.js, React-Konva |
+| **Blockchain** | Solidity (Smart Contracts), Ethers.js, Polygon Network |
+| **Cryptography** | CryptoJS, MerkleTreeJS |
+| **Infrastructure** | PM2, Cloudflare Tunnels, Resend (Email) |
+
+---
+
+## 🛠️ Local Development
+
+### 1. Clone the Repository
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/your-username/certgen.git
+cd certgen
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Install Dependencies
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Environment Configuration
+Create a `.env` file in the root directory and add the following:
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/certgen"
+NEXTAUTH_SECRET="your-secret"
+NEXTAUTH_URL="http://localhost:3000"
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# OAuth
+GOOGLE_CLIENT_ID="your-google-id"
+GOOGLE_CLIENT_SECRET="your-google-secret"
 
-## Learn More
+# Email
+RESEND_API_KEY="your-resend-key"
 
-To learn more about Next.js, take a look at the following resources:
+# Blockchain (Optional for local)
+POLYGON_RPC_URL="https://rpc-amoy.polygon.technology"
+POLYGON_PRIVATE_KEY="your-private-key"
+POLYGON_CONTRACT_ADDRESS="your-contract-address"
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Database Setup
+```bash
+npx prisma db push
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 5. Run Development Server
+```bash
+npm run dev
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📜 Smart Contract
+The verification logic is handled by the `CertGenRegistry.sol` contract (found in `/contracts`). It maps Merkle roots to timestamps, ensuring that once a certificate is issued, its record is permanent and unchangeable.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## ⚖️ License
+This project is proprietary. © 2026 CERTGEN SYSTEMS INC. All Rights Reserved.

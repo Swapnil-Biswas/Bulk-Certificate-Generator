@@ -4,7 +4,7 @@ export async function sendVerificationEmail(
   email: string,
   token: string
 ) {
-  const verifyUrl = `http://localhost:3000/verify-email?token=${token}`;
+  const verifyUrl = `https://certificategenerator.space/verify-email?token=${token}`;
 
   const result = await resend.emails.send({
     from: "CertGen <noreply@mail.certificategenerator.space>",

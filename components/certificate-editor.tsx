@@ -21,6 +21,7 @@ import Papa from "papaparse";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { jsPDF } from "jspdf";
+import QRCode from "qrcode";
 
 import {
   Upload,
@@ -36,6 +37,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  QrCode,
 } from "lucide-react";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -46,6 +48,7 @@ type Alignment = "left" | "center" | "right";
 
 type TextField = {
   id: string;
+  type?: "text" | "qr";
   label: string;
   x: number;
   y: number;
@@ -70,9 +73,10 @@ const FONT_OPTIONS = [
   "Oswald",
 ];
 
-function createField(label = "New Text Layer"): TextField {
+function createField(label = "{{name}}"): TextField {
   return {
     id: `field-${Math.random().toString(36).substr(2, 9)}`,
+    type: "text",
     label,
     x: 50,
     y: 50,
@@ -85,6 +89,40 @@ function createField(label = "New Text Layer"): TextField {
   };
 }
 
+function createQRField(): TextField {
+  return {
+    id: `qr-${Math.random().toString(36).substr(2, 9)}`,
+    type: "qr",
+    label: "Verification QR",
+    x: 50,
+    y: 50,
+    width: 150,
+    fontSize: 150, // Use fontSize as height/size for QR
+    fontFamily: "Inter",
+    fill: "#000000",
+    align: "left",
+    autoFit: false,
+  };
+}
+
+function getFilenameFromRow(row: Record<string, string>, index: number) {
+  const possibleKeys = [
+    "name",
+    "Name",
+    "names",
+    "Names",
+    "Full Name",
+    "fullname",
+  ];
+  for (const key of possibleKeys) {
+    if (row[key]) return row[key].trim().replace(/[^a-z0-9]/gi, "_");
+  }
+  // Fallback to first column
+  const values = Object.values(row);
+  if (values[0]) return values[0].trim().replace(/[^a-z0-9]/gi, "_");
+  return `certificate_${index + 1}`;
+}
+
 function replacePlaceholders(text: string, row: Record<string, string>) {
   let output = text;
   Object.entries(row).forEach(([key, value]) => {
@@ -92,6 +130,46 @@ function replacePlaceholders(text: string, row: Record<string, string>) {
     output = output.split(placeholder).join(value);
   });
   return output;
+}
+
+function QRNode({ field, scale, onSelect, onUpdate }: { 
+  field: TextField, 
+  scale: number, 
+  onSelect: () => void, 
+  onUpdate: (u: Partial<TextField>) => void 
+}) {
+  const [qrImage] = useImage("/logo.png"); // Use logo as placeholder or a generated QR
+
+  return (
+    <KonvaImage
+      id={field.id}
+      image={qrImage}
+      x={field.x * scale}
+      y={field.y * scale}
+      width={field.width * scale}
+      height={field.fontSize * scale}
+      draggable
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={(e) => {
+        onUpdate({
+          x: e.target.x() / scale,
+          y: e.target.y() / scale,
+        });
+      }}
+      onTransformEnd={(e) => {
+        const node = e.target;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        node.scaleX(1);
+        node.scaleY(1);
+        onUpdate({
+          width: (node.width() * scaleX) / scale,
+          fontSize: Math.max(10, Math.round(field.fontSize * scaleY)),
+        });
+      }}
+    />
+  );
 }
 
 export default function CertificateEditor() {
@@ -186,9 +264,38 @@ export default function CertificateEditor() {
       const reader = new FileReader();
       reader.onload = (event) => {
         const text = event.target?.result as string;
-        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
-        if (result.data) {
-          setRows(result.data as Record<string, string>[]);
+        let data: Record<string, string>[] = [];
+
+        if (file.name.endsWith(".txt")) {
+          // Try parsing as CSV first (might be tab-separated or comma-separated with header)
+          const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+          const firstRow = result.data[0] as Record<string, string> | undefined;
+          // If no headers were found or it looks like a single column list
+          if (
+            result.data.length > 0 &&
+            firstRow &&
+            Object.keys(firstRow).length <= 1 &&
+            !result.meta.fields?.includes("name")
+          ) {
+            // Treat as simple list of names
+            const lines = text
+              .split(/\r?\n/)
+              .map((l) => l.trim())
+              .filter((l) => l.length > 0);
+            data = lines.map((line) => ({ name: line }));
+          } else {
+            data = result.data as Record<string, string>[];
+          }
+        } else {
+          const result = Papa.parse(text, {
+            header: true,
+            skipEmptyLines: true,
+          });
+          data = result.data as Record<string, string>[];
+        }
+
+        if (data.length > 0) {
+          setRows(data);
           setActiveTab("data");
         }
       };
@@ -198,6 +305,12 @@ export default function CertificateEditor() {
 
   const addField = () => {
     const field = createField();
+    setFields((prev) => [...prev, field]);
+    setSelectedFieldId(field.id);
+  };
+
+  const addQRField = () => {
+    const field = createQRField();
     setFields((prev) => [...prev, field]);
     setSelectedFieldId(field.id);
   };
@@ -265,6 +378,9 @@ export default function CertificateEditor() {
     if (!stageRef.current) return;
     const prevSelection = selectedFieldId;
     setSelectedFieldId(null);
+    if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+    }
     setIsExporting(true);
     setExportProgress(0);
 
@@ -276,23 +392,92 @@ export default function CertificateEditor() {
       saveAs(dataUrl, `${templateName.replace(/\s+/g, "_")}.png`);
       setSelectedFieldId(prevSelection);
       setIsExporting(false);
+
+      // Log single export
+      try {
+        await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: templateName,
+            count: 1,
+            templateName: templateName,
+            format: "PNG",
+          }),
+        });
+      } catch (e) {}
+      return;
+    }
+
+    // NEW: Initialize Batch to get IDs for QR codes
+    let initializedBatch;
+    try {
+      const res = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${templateName} - Bulk PNG`,
+          count: rows.length,
+          templateName: templateName,
+          format: "PNG",
+          rows: rows,
+        }),
+      });
+      initializedBatch = await res.json();
+    } catch (err) {
+      console.error("Batch initialization failed", err);
+      alert("System failed to initialize batch records. Aborting export.");
+      setIsExporting(false);
       return;
     }
 
     const zip = new JSZip();
     const stage = stageRef.current;
+    const qrFields = fields.filter(f => f.type === "qr");
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+      const certId = initializedBatch.certificates?.[i]?.id;
       setExportProgress(Math.round(((i + 1) / rows.length) * 100));
+      
+      // Update Text Fields
       fields.forEach((f) => {
-        const node = stage.findOne(`#${f.id}`);
-        if (node) node.text(replacePlaceholders(f.label, row));
+        if (f.type !== "qr") {
+          const node = stage.findOne(`#${f.id}`);
+          if (node) node.text(replacePlaceholders(f.label, row));
+        }
       });
+
+      // Update QR Fields
+      if (qrFields.length > 0 && certId) {
+        const verifyUrl = `${window.location.origin}/verify/${certId}`;
+        const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 500 });
+        const qrImg = new Image();
+        qrImg.src = qrDataUrl;
+        await new Promise((res) => (qrImg.onload = res));
+
+        qrFields.forEach(f => {
+          const node = stage.findOne(`#${f.id}`);
+          if (node) node.image(qrImg);
+        });
+      }
+
       stage.getLayers()[0].batchDraw();
       await new Promise((resolve) => setTimeout(resolve, 60));
       const dataUrl = stage.toDataURL({ pixelRatio });
-      zip.file(`${row.name || row.Name || "cert"}_${i + 1}.png`, dataUrl.split(",")[1], { base64: true });
+      zip.file(`${getFilenameFromRow(row, i)}.png`, dataUrl.split(",")[1], {
+        base64: true,
+      });
     }
+
+    // Reset UI
+    fields.forEach((f) => {
+      const node = stage.findOne(`#${f.id}`);
+      if (node) {
+        if (f.type !== "qr") node.text(f.label);
+      }
+    });
+    stage.getLayers()[0].batchDraw();
 
     setFields([...fields]);
     setSelectedFieldId(prevSelection);
@@ -305,6 +490,9 @@ export default function CertificateEditor() {
     if (!stageRef.current) return;
     const prevSelection = selectedFieldId;
     setSelectedFieldId(null);
+    if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+    }
     setIsExporting(true);
     await new Promise((resolve) => setTimeout(resolve, 150));
 
@@ -315,41 +503,126 @@ export default function CertificateEditor() {
       unit: "px",
       format: [canvasMeta.originalWidth, canvasMeta.originalHeight],
     });
-    pdf.addImage(dataUrl, "PNG", 0, 0, canvasMeta.originalWidth, canvasMeta.originalHeight);
+    pdf.addImage(
+      dataUrl,
+      "PNG",
+      0,
+      0,
+      canvasMeta.originalWidth,
+      canvasMeta.originalHeight
+    );
     pdf.save(`${templateName.replace(/\s+/g, "_")}.pdf`);
     setSelectedFieldId(prevSelection);
     setIsExporting(false);
+
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName,
+          count: 1,
+          templateName: templateName,
+          format: "PDF",
+        }),
+      });
+    } catch (e) {}
   };
 
   const handleExportBulkPDF = async () => {
     if (!stageRef.current || rows.length === 0) return;
     const prevSelection = selectedFieldId;
     setSelectedFieldId(null);
+    if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+    }
     setIsExporting(true);
     setExportProgress(0);
+
+    // NEW: Initialize Batch to get IDs for QR codes
+    let initializedBatch;
+    try {
+      const res = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${templateName} - Bulk PDF`,
+          count: rows.length,
+          templateName: templateName,
+          format: "PDF",
+          rows: rows,
+        }),
+      });
+      initializedBatch = await res.json();
+    } catch (err) {
+      console.error("Batch initialization failed", err);
+      alert("System failed to initialize batch records. Aborting export.");
+      setIsExporting(false);
+      return;
+    }
 
     const zip = new JSZip();
     const stage = stageRef.current;
     const pixelRatio = canvasMeta.scale > 0 ? 1 / canvasMeta.scale : 1;
+    const qrFields = fields.filter(f => f.type === "qr");
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+      const certId = initializedBatch.certificates?.[i]?.id;
       setExportProgress(Math.round(((i + 1) / rows.length) * 100));
+
+      // Update Text Fields
       fields.forEach((f) => {
-        const node = stage.findOne(`#${f.id}`);
-        if (node) node.text(replacePlaceholders(f.label, row));
+        if (f.type !== "qr") {
+          const node = stage.findOne(`#${f.id}`);
+          if (node) node.text(replacePlaceholders(f.label, row));
+        }
       });
+
+      // Update QR Fields
+      if (qrFields.length > 0 && certId) {
+        const verifyUrl = `${window.location.origin}/verify/${certId}`;
+        const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 500 });
+        const qrImg = new Image();
+        qrImg.src = qrDataUrl;
+        await new Promise((res) => (qrImg.onload = res));
+
+        qrFields.forEach(f => {
+          const node = stage.findOne(`#${f.id}`);
+          if (node) node.image(qrImg);
+        });
+      }
+
       stage.getLayers()[0].batchDraw();
       await new Promise((resolve) => setTimeout(resolve, 60));
       const dataUrl = stage.toDataURL({ pixelRatio });
       const pdf = new jsPDF({
-        orientation: canvasMeta.originalWidth > canvasMeta.originalHeight ? "landscape" : "portrait",
+        orientation:
+          canvasMeta.originalWidth > canvasMeta.originalHeight
+            ? "landscape"
+            : "portrait",
         unit: "px",
         format: [canvasMeta.originalWidth, canvasMeta.originalHeight],
       });
-      pdf.addImage(dataUrl, "PNG", 0, 0, canvasMeta.originalWidth, canvasMeta.originalHeight);
-      zip.file(`${row.name || row.Name || "cert"}_${i + 1}.pdf`, pdf.output("blob"));
+      pdf.addImage(
+        dataUrl,
+        "PNG",
+        0,
+        0,
+        canvasMeta.originalWidth,
+        canvasMeta.originalHeight
+      );
+      zip.file(`${getFilenameFromRow(row, i)}.pdf`, pdf.output("blob"));
     }
+
+    // Reset UI
+    fields.forEach((f) => {
+      const node = stage.findOne(`#${f.id}`);
+      if (node) {
+        if (f.type !== "qr") node.text(f.label);
+      }
+    });
+    stage.getLayers()[0].batchDraw();
 
     setFields([...fields]);
     setSelectedFieldId(prevSelection);
@@ -444,6 +717,12 @@ export default function CertificateEditor() {
                   >
                     <Plus className="h-4 w-4" /> Add Text Layer
                   </button>
+                  <button
+                    onClick={addQRField}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card hover:bg-muted py-3 font-bold text-xs shadow-sm active:scale-95 transition-all"
+                  >
+                    <QrCode className="h-4 w-4 text-violet-600" /> Add Verification QR
+                  </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={duplicateField}
@@ -468,84 +747,106 @@ export default function CertificateEditor() {
                   <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Properties</label>
                   
                   <div className="space-y-5 bg-muted/30 rounded-2xl p-4 border border-border">
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Content</label>
-                      <input
-                        type="text"
-                        value={selectedField.label}
-                        onChange={(e) => updateField(selectedField.id, { label: e.target.value })}
-                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-violet-500/30 font-bold outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Typography</label>
-                      <select
-                        value={selectedField.fontFamily}
-                        onChange={(e) => updateField(selectedField.id, { fontFamily: e.target.value })}
-                        className="w-full rounded-lg border border-border bg-card px-2 py-2 text-xs text-foreground focus:ring-1 focus:ring-violet-500/30 font-bold outline-none cursor-pointer"
-                      >
-                        {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Color</label>
-                        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1.5 shadow-sm">
+                    {selectedField.type === "qr" ? (
+                      <div className="space-y-4">
+                        <p className="text-[10px] font-bold text-muted-foreground leading-relaxed">
+                          This QR code will dynamically link to each recipient's verification page during export.
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Size</label>
+                            <span className="text-[9px] font-black text-violet-600">{selectedField.fontSize}px</span>
+                          </div>
                           <input
-                            type="color"
-                            value={selectedField.fill}
-                            onChange={(e) => updateField(selectedField.id, { fill: e.target.value })}
-                            className="h-6 w-6 rounded border border-border bg-transparent cursor-pointer"
+                            type="range" min="40" max="400"
+                            value={selectedField.fontSize}
+                            onChange={(e) => updateField(selectedField.id, { fontSize: parseInt(e.target.value), width: parseInt(e.target.value) })}
+                            className="w-full accent-violet-600 h-1 bg-border rounded-full appearance-none cursor-pointer"
                           />
-                          <span className="text-[9px] font-black font-mono text-muted-foreground uppercase">{selectedField.fill}</span>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Content</label>
+                          <input
+                            type="text"
+                            value={selectedField.label}
+                            onChange={(e) => updateField(selectedField.id, { label: e.target.value })}
+                            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground focus:ring-1 focus:ring-violet-500/30 font-bold outline-none"
+                          />
+                        </div>
 
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Align</label>
-                        <div className="flex bg-card border border-border rounded-lg p-0.5 shadow-sm">
-                          {(["left", "center", "right"] as Alignment[]).map((align) => {
-                            const Icon = align === "left" ? AlignLeft : align === "center" ? AlignCenter : AlignRight;
-                            return (
-                              <button
-                                key={align}
-                                onClick={() => updateField(selectedField.id, { align })}
-                                className={`flex-1 flex items-center justify-center rounded-md py-1.5 transition ${selectedField.align === align ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                              >
-                                <Icon className="h-3 w-3" />
-                              </button>
-                            );
-                          })}
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Typography</label>
+                          <select
+                            value={selectedField.fontFamily}
+                            onChange={(e) => updateField(selectedField.id, { fontFamily: e.target.value })}
+                            className="w-full rounded-lg border border-border bg-card px-2 py-2 text-xs text-foreground focus:ring-1 focus:ring-violet-500/30 font-bold outline-none cursor-pointer"
+                          >
+                            {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                          </select>
                         </div>
-                      </div>
-                    </div>
 
-                    {!selectedField.autoFit && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Size</label>
-                          <span className="text-[9px] font-black text-violet-600">{selectedField.fontSize}px</span>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Color</label>
+                            <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1.5 shadow-sm">
+                              <input
+                                type="color"
+                                value={selectedField.fill}
+                                onChange={(e) => updateField(selectedField.id, { fill: e.target.value })}
+                                className="h-6 w-6 rounded border border-border bg-transparent cursor-pointer"
+                              />
+                              <span className="text-[9px] font-black font-mono text-muted-foreground uppercase">{selectedField.fill}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Align</label>
+                            <div className="flex bg-card border border-border rounded-lg p-0.5 shadow-sm">
+                              {(["left", "center", "right"] as Alignment[]).map((align) => {
+                                const Icon = align === "left" ? AlignLeft : align === "center" ? AlignCenter : AlignRight;
+                                return (
+                                  <button
+                                    key={align}
+                                    onClick={() => updateField(selectedField.id, { align })}
+                                    className={`flex-1 flex items-center justify-center rounded-md py-1.5 transition ${selectedField.align === align ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                                  >
+                                    <Icon className="h-3 w-3" />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
-                        <input
-                          type="range" min="8" max="200"
-                          value={selectedField.fontSize}
-                          onChange={(e) => updateField(selectedField.id, { fontSize: parseInt(e.target.value) })}
-                          className="w-full accent-violet-600 h-1 bg-border rounded-full appearance-none cursor-pointer"
-                        />
-                      </div>
+
+                        {!selectedField.autoFit && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Size</label>
+                              <span className="text-[9px] font-black text-violet-600">{selectedField.fontSize}px</span>
+                            </div>
+                            <input
+                              type="range" min="8" max="200"
+                              value={selectedField.fontSize}
+                              onChange={(e) => updateField(selectedField.id, { fontSize: parseInt(e.target.value) })}
+                              className="w-full accent-violet-600 h-1 bg-border rounded-full appearance-none cursor-pointer"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-4 border-t border-border">
+                          <span className="text-[10px] font-black text-foreground uppercase tracking-tight">Auto-fit width</span>
+                          <button
+                            onClick={() => updateField(selectedField.id, { autoFit: !selectedField.autoFit })}
+                            className={`w-10 h-5 rounded-full transition-colors relative ${selectedField.autoFit ? 'bg-violet-600' : 'bg-muted-foreground/30'}`}
+                          >
+                            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${selectedField.autoFit ? 'left-6' : 'left-1'}`} />
+                          </button>
+                        </div>
+                      </>
                     )}
-
-                    <div className="flex items-center justify-between pt-4 border-t border-border">
-                      <span className="text-[10px] font-black text-foreground uppercase tracking-tight">Auto-fit width</span>
-                      <button
-                        onClick={() => updateField(selectedField.id, { autoFit: !selectedField.autoFit })}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${selectedField.autoFit ? 'bg-violet-600' : 'bg-muted-foreground/30'}`}
-                      >
-                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${selectedField.autoFit ? 'left-6' : 'left-1'}`} />
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}
@@ -773,44 +1074,54 @@ export default function CertificateEditor() {
                     />
 
                     {fields.map((field) => (
-                      <Text
-                        key={field.id}
-                        id={field.id}
-                        text={field.label}
-                        x={field.x * canvasMeta.scale}
-                        y={field.y * canvasMeta.scale}
-                        width={field.width * canvasMeta.scale}
-                        fontSize={field.fontSize * canvasMeta.scale}
-                        fontFamily={field.fontFamily}
-                        fill={field.fill}
-                        align={field.align}
-                        draggable
-                        lineHeight={1}
-                        padding={0}
-                        onClick={() => setSelectedFieldId(field.id)}
-                        onTap={() => setSelectedFieldId(field.id)}
-                        onDragEnd={(e) => {
-                          updateField(field.id, {
-                            x: e.target.x() / canvasMeta.scale,
-                            y: e.target.y() / canvasMeta.scale,
-                          });
-                        }}
-                        onTransformEnd={(e) => {
-                          const node = e.target;
-                          const scaleX = node.scaleX();
-                          const scaleY = node.scaleY();
-                          node.scaleX(1);
-                          node.scaleY(1);
-                          updateField(field.id, {
-                            width: (node.width() * scaleX) / canvasMeta.scale,
-                            fontSize: Math.max(8, Math.round(field.fontSize * scaleY)),
-                          });
-                          setTimeout(() => {
-                            transformerRef.current?.forceUpdate();
-                            stageRef.current?.batchDraw();
-                          }, 10);
-                        }}
-                      />
+                      field.type === "qr" ? (
+                        <QRNode
+                          key={field.id}
+                          field={field}
+                          scale={canvasMeta.scale}
+                          onSelect={() => setSelectedFieldId(field.id)}
+                          onUpdate={(updates) => updateField(field.id, updates)}
+                        />
+                      ) : (
+                        <Text
+                          key={field.id}
+                          id={field.id}
+                          text={field.label}
+                          x={field.x * canvasMeta.scale}
+                          y={field.y * canvasMeta.scale}
+                          width={field.width * canvasMeta.scale}
+                          fontSize={field.fontSize * canvasMeta.scale}
+                          fontFamily={field.fontFamily}
+                          fill={field.fill}
+                          align={field.align}
+                          draggable
+                          lineHeight={1}
+                          padding={0}
+                          onClick={() => setSelectedFieldId(field.id)}
+                          onTap={() => setSelectedFieldId(field.id)}
+                          onDragEnd={(e) => {
+                            updateField(field.id, {
+                              x: e.target.x() / canvasMeta.scale,
+                              y: e.target.y() / canvasMeta.scale,
+                            });
+                          }}
+                          onTransformEnd={(e) => {
+                            const node = e.target;
+                            const scaleX = node.scaleX();
+                            const scaleY = node.scaleY();
+                            node.scaleX(1);
+                            node.scaleY(1);
+                            updateField(field.id, {
+                              width: (node.width() * scaleX) / canvasMeta.scale,
+                              fontSize: Math.max(8, Math.round(field.fontSize * scaleY)),
+                            });
+                            setTimeout(() => {
+                              transformerRef.current?.forceUpdate();
+                              stageRef.current?.batchDraw();
+                            }, 10);
+                          }}
+                        />
+                      )
                     ))}
 
                     <Transformer

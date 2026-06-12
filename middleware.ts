@@ -12,6 +12,14 @@ export default withAuth(
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
+    // Check for approval status for non-admins
+    if (token.role !== "ADMIN" && token.approvalStatus !== "APPROVED") {
+      // Redirect to login with a specific error code
+      const url = new URL("/login", req.url);
+      url.searchParams.set("error", "PendingApproval");
+      return NextResponse.redirect(url);
+    }
+
     if (isAdmin && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
