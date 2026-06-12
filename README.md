@@ -99,3 +99,5 @@ The verification logic is handled by the `CertGenRegistry.sol` contract (found i
 
 ## ⚖️ License
 This project is proprietary. © 2026 CERTGEN SYSTEMS INC. All Rights Reserved.
+Made by Swapnil 🙂
+
