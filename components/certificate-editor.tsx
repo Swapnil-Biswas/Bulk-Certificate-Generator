@@ -131,44 +131,82 @@ function replacePlaceholders(text: string, row: Record<string, string>) {
   });
   return output;
 }
-
-function QRNode({ field, scale, onSelect, onUpdate }: { 
+function QRNode({ field, scale, isExporting, onSelect, onUpdate }: { 
   field: TextField, 
   scale: number, 
+  isExporting: boolean,
   onSelect: () => void, 
   onUpdate: (u: Partial<TextField>) => void 
 }) {
-  const [qrImage] = useImage("/logo.png"); // Use logo as placeholder or a generated QR
+  const [qrPlaceholder, setQrPlaceholder] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Generate a placeholder QR for the UI
+    QRCode.toDataURL("https://certificategenerator.space/verify/placeholder", {
+      margin: 1,
+      width: 400,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      }
+    }).then(setQrPlaceholder);
+  }, []);
+
+  const [image] = useImage(qrPlaceholder || "");
 
   return (
-    <KonvaImage
-      id={field.id}
-      image={qrImage}
-      x={field.x * scale}
-      y={field.y * scale}
-      width={field.width * scale}
-      height={field.fontSize * scale}
-      draggable
-      onClick={onSelect}
-      onTap={onSelect}
-      onDragEnd={(e) => {
-        onUpdate({
-          x: e.target.x() / scale,
-          y: e.target.y() / scale,
-        });
-      }}
-      onTransformEnd={(e) => {
-        const node = e.target;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        node.scaleX(1);
-        node.scaleY(1);
-        onUpdate({
-          width: (node.width() * scaleX) / scale,
-          fontSize: Math.max(10, Math.round(field.fontSize * scaleY)),
-        });
-      }}
-    />
+    <>
+      <KonvaImage
+        id={field.id}
+        image={image}
+        x={field.x * scale}
+        y={field.y * scale}
+        width={field.width * scale}
+        height={field.fontSize * scale}
+        draggable
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          onUpdate({
+            x: e.target.x() / scale,
+            y: e.target.y() / scale,
+          });
+        }}
+        onTransformEnd={(e) => {
+          const node = e.target;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+          
+          // Enforce square aspect ratio by taking the larger scale
+          const maxScale = Math.max(scaleX, scaleY);
+          
+          node.scaleX(1);
+          node.scaleY(1);
+          
+          onUpdate({
+            width: (node.width() * maxScale) / scale,
+            fontSize: Math.max(40, Math.round(field.fontSize * maxScale)), // Sync fontSize with width for square
+          });
+        }}
+      />
+      {!isExporting && (
+        <Text
+          text="PREVIEW ONLY"
+          x={field.x * scale}
+          y={(field.y * scale) + (field.fontSize * scale) / 2 - 5}
+          width={field.width * scale}
+          fontSize={Math.max(8, (field.width * scale) / 8)}
+          fontFamily="Inter"
+          fontStyle="black"
+          fill="white"
+          align="center"
+          listening={false}
+          opacity={0.8}
+          shadowColor="black"
+          shadowBlur={10}
+        />
+      )}
+    </>
   );
 }
 
@@ -438,9 +476,8 @@ export default function CertificateEditor() {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const certId = initializedBatch.certificates?.[i]?.id;
-      setExportProgress(Math.round(((i + 1) / rows.length) * 100));
       
-      // Update Text Fields
+      // 1. Update Text Fields Imperatively
       fields.forEach((f) => {
         if (f.type !== "qr") {
           const node = stage.findOne(`#${f.id}`);
@@ -448,7 +485,7 @@ export default function CertificateEditor() {
         }
       });
 
-      // Update QR Fields
+      // 2. Update QR Fields Imperatively
       if (qrFields.length > 0 && certId) {
         const verifyUrl = `${window.location.origin}/verify/${certId}`;
         const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 500 });
@@ -462,12 +499,17 @@ export default function CertificateEditor() {
         });
       }
 
-      stage.getLayers()[0].batchDraw();
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // 3. Draw and Capture immediately before any re-renders
+      stage.batchDraw();
+      await new Promise((resolve) => setTimeout(resolve, 50));
       const dataUrl = stage.toDataURL({ pixelRatio });
+      
       zip.file(`${getFilenameFromRow(row, i)}.png`, dataUrl.split(",")[1], {
         base64: true,
       });
+
+      // 4. Update progress at the end to trigger re-render AFTER capture
+      setExportProgress(Math.round(((i + 1) / rows.length) * 100));
     }
 
     // Reset UI
@@ -569,9 +611,8 @@ export default function CertificateEditor() {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const certId = initializedBatch.certificates?.[i]?.id;
-      setExportProgress(Math.round(((i + 1) / rows.length) * 100));
 
-      // Update Text Fields
+      // 1. Update Text Fields Imperatively
       fields.forEach((f) => {
         if (f.type !== "qr") {
           const node = stage.findOne(`#${f.id}`);
@@ -579,7 +620,7 @@ export default function CertificateEditor() {
         }
       });
 
-      // Update QR Fields
+      // 2. Update QR Fields Imperatively
       if (qrFields.length > 0 && certId) {
         const verifyUrl = `${window.location.origin}/verify/${certId}`;
         const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 500 });
@@ -593,9 +634,11 @@ export default function CertificateEditor() {
         });
       }
 
-      stage.getLayers()[0].batchDraw();
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // 3. Draw and Capture immediately before any re-renders
+      stage.batchDraw();
+      await new Promise((resolve) => setTimeout(resolve, 50));
       const dataUrl = stage.toDataURL({ pixelRatio });
+      
       const pdf = new jsPDF({
         orientation:
           canvasMeta.originalWidth > canvasMeta.originalHeight
@@ -613,6 +656,9 @@ export default function CertificateEditor() {
         canvasMeta.originalHeight
       );
       zip.file(`${getFilenameFromRow(row, i)}.pdf`, pdf.output("blob"));
+
+      // 4. Update progress at the end to trigger re-render AFTER capture
+      setExportProgress(Math.round(((i + 1) / rows.length) * 100));
     }
 
     // Reset UI
@@ -1079,6 +1125,7 @@ export default function CertificateEditor() {
                           key={field.id}
                           field={field}
                           scale={canvasMeta.scale}
+                          isExporting={isExporting}
                           onSelect={() => setSelectedFieldId(field.id)}
                           onUpdate={(updates) => updateField(field.id, updates)}
                         />

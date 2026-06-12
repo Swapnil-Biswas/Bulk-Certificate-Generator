@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/get-session";
 import { hashData, getMerkleRoot, getMerkleProof } from "@/lib/utils/crypto";
 import { anchorRootOnChain } from "@/lib/blockchain/polygon";
+import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
@@ -26,42 +27,33 @@ export async function POST(req: Request) {
       });
 
       if (rows && rows.length > 0) {
-        // 1. Create all certificates first to get their IDs
+        // 1. Pre-generate IDs and Hashes to avoid unique constraint issues
+        const certDataWithIds = rows.map((row: any) => {
+          const id = `cert_${crypto.randomBytes(4).toString("hex")}_${Date.now().toString(36)}`;
+          const hash = hashData(id + JSON.stringify(row));
+          return { id, hash, metadata: row };
+        });
+
+        const hashes = certDataWithIds.map((c: any) => c.hash);
+        const merkleRoot = getMerkleRoot(hashes);
+
+        // 2. Create certificates with their proofs
         const createdCerts = [];
-        for (const row of rows) {
+        for (const item of certDataWithIds) {
+          const proof = getMerkleProof(hashes, item.hash);
           const cert = await tx.certificate.create({
             data: {
+              id: item.id,
               batchId: newBatch.id,
-              metadata: row,
-              hash: "",
-              merkleProof: [],
+              metadata: item.metadata,
+              hash: item.hash,
+              merkleProof: proof,
             }
           });
           createdCerts.push(cert);
         }
 
-        // 2. Generate hashes
-        const hashes = createdCerts.map(cert => 
-          hashData(cert.id + JSON.stringify(cert.metadata))
-        );
-
-        // 3. Calculate Merkle Root
-        const merkleRoot = getMerkleRoot(hashes);
-
-        // 4. Update each certificate
-        for (let i = 0; i < createdCerts.length; i++) {
-          const cert = createdCerts[i];
-          const proof = getMerkleProof(hashes, hashes[i]);
-          await tx.certificate.update({
-            where: { id: cert.id },
-            data: {
-              hash: hashes[i],
-              merkleProof: proof,
-            },
-          });
-        }
-
-        // 5. Update batch with Merkle Root and set as Completed
+        // 3. Update batch with Merkle Root and set as Completed
         return await tx.certificateBatch.update({
           where: { id: newBatch.id },
           data: {
@@ -70,6 +62,9 @@ export async function POST(req: Request) {
           },
           include: {
             certificates: {
+              orderBy: {
+                createdAt: "asc",
+              },
               select: {
                 id: true,
               }
