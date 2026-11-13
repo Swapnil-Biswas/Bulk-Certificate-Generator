@@ -33,7 +33,9 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
-    const { name, fields, canvasMeta, category } = body;
+    const { name, fields, canvasMeta, category, imagePath } = body;
+    // Only persist backgrounds that will still resolve later (never temporary blob: URLs).
+    const storableImage = typeof imagePath === "string" && !imagePath.startsWith("blob:");
 
     const template = await prisma.certificateTemplate.update({
       where: { id, userId: session.user.id },
@@ -42,6 +44,7 @@ export async function PATCH(
         ...(fields && { fields }),
         ...(canvasMeta && { canvasMeta }),
         ...(category && { category }),
+        ...(storableImage && { imagePath }),
       },
     });
 

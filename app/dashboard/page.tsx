@@ -1,251 +1,337 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import {
+  Layers3,
+  FileText,
+  FolderOpen,
+  ShieldCheck,
+  Plus,
+  ArrowRight,
+  ArrowUpRight,
+  Upload,
+  Table2,
+  Download,
+  Check,
+} from "lucide-react";
+
 import { getSession } from "@/lib/auth/get-session";
 import { prisma } from "@/lib/prisma";
-import Link from "next/link";
+import { TemplatePreview } from "@/components/template-preview";
+import { plural, relativeDay, relativeDayInline } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import {
-  Layers3,
-  FileText,
-  Download,
-  CheckCircle2,
-  Plus,
-  ArrowRight,
-  Clock,
-  Zap,
-} from "lucide-react";
-
 export default async function DashboardPage() {
   const session = await getSession();
+  if (!session) redirect("/login");
 
-  if (!session) {
-    redirect("/login");
-  }
+  const userId = session.user.id;
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
 
-  // Fetch real stats
-  const [templateCount, batchCount, user] = await Promise.all([
-    prisma.certificateTemplate.count({
-      where: { userId: session.user.id }
-    }),
-    prisma.certificateBatch.count({
-      where: { userId: session.user.id }
-    }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: {
-        certificateBatches: {
-          select: { count: true }
-        }
-      }
-    })
-  ]);
+  const [user, templateCount, batchCount, totals, lastMonth, recentBatches, recentTemplates] =
+    await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+      prisma.certificateTemplate.count({ where: { userId } }),
+      prisma.certificateBatch.count({ where: { userId } }),
+      prisma.certificateBatch.aggregate({ where: { userId }, _sum: { count: true } }),
+      prisma.certificateBatch.aggregate({
+        where: { userId, createdAt: { gte: monthAgo } },
+        _sum: { count: true },
+      }),
+      prisma.certificateBatch.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          count: true,
+          format: true,
+          status: true,
+          templateName: true,
+          createdAt: true,
+          _count: { select: { certificates: true } },
+        },
+      }),
+      prisma.certificateTemplate.findMany({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+        take: 3,
+        select: { id: true, name: true, category: true, imagePath: true, updatedAt: true },
+      }),
+    ]);
 
   if (!user) redirect("/login");
 
-  const totalGeneratedCount = user.certificateBatches.reduce((acc, batch) => acc + batch.count, 0);
+  const totalGenerated = totals._sum.count ?? 0;
+  const generatedThisMonth = lastMonth._sum.count ?? 0;
+  const verifiable = await prisma.certificate.count({ where: { batch: { userId } } });
+  const firstName = user.name?.trim().split(/\s+/)[0] || "there";
+  const isNew = templateCount === 0 && batchCount === 0;
 
   const stats = [
     {
-      title: "Certificates Generated",
-      value: totalGeneratedCount.toLocaleString(),
+      label: "Certificates generated",
+      value: totalGenerated.toLocaleString("en-US"),
+      note: generatedThisMonth > 0 ? `${generatedThisMonth.toLocaleString("en-US")} in the last 30 days` : "None in the last 30 days",
       icon: FileText,
-      gradient: "from-blue-500 to-indigo-500",
-      description: "Lifetime generation"
+      href: "/dashboard/history",
     },
     {
-      title: "Templates Saved",
-      value: templateCount.toString(),
+      label: "Batches",
+      value: batchCount.toLocaleString("en-US"),
+      note: "Bulk and single exports",
+      icon: FolderOpen,
+      href: "/dashboard/history",
+    },
+    {
+      label: "Saved templates",
+      value: templateCount.toLocaleString("en-US"),
+      note: "Reusable designs",
       icon: Layers3,
-      gradient: "from-violet-500 to-purple-500",
-      description: "Custom designs"
+      href: "/dashboard/templates",
     },
     {
-      title: "Batches Processed",
-      value: batchCount.toString(),
-      icon: Download,
-      gradient: "from-emerald-500 to-teal-500",
-      description: "Bulk operations"
-    },
-    {
-      title: "Identity Verified",
-      value: user.emailVerified ? "Verified" : "Pending",
-      icon: CheckCircle2,
-      gradient: "from-amber-500 to-orange-500",
-      description: "Security status"
+      label: "Verifiable certificates",
+      value: verifiable.toLocaleString("en-US"),
+      note: "With a public verification page",
+      icon: ShieldCheck,
+      href: "/dashboard/verification",
     },
   ];
 
-  const recentBatches = await prisma.certificateBatch.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
+  const steps = [
+    {
+      icon: Upload,
+      title: "Upload your design",
+      body: "Start with any certificate image — PNG or JPG — and place a name field on it.",
+      done: templateCount > 0,
+    },
+    {
+      icon: Table2,
+      title: "Add your recipients",
+      body: "Import a CSV or a plain list of names. Each row becomes one certificate.",
+      done: batchCount > 0,
+    },
+    {
+      icon: Download,
+      title: "Export everything",
+      body: "Download a ZIP of PNGs or PDFs, each with its own verification QR code.",
+      done: verifiable > 0,
+    },
+  ];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Overview</h1>
-          <p className="text-sm text-muted-foreground font-medium mt-1">
-            Design professional certificate templates and manage your generations.
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
+            {isNew ? `Welcome, ${firstName}` : `Welcome back, ${firstName}`}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {isNew
+              ? "Three steps to your first batch of certificates."
+              : "Here is what you have been generating lately."}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link 
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/dashboard/templates"
+            className="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-border bg-card text-sm font-semibold text-foreground hover:bg-muted transition active:scale-[0.98]"
+          >
+            <Layers3 className="h-4 w-4 text-muted-foreground" />
+            Use a template
+          </Link>
+          <Link
             href="/dashboard/certificates"
-            className="px-5 py-2.5 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition shadow-sm active:scale-95 flex items-center gap-2"
+            className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white shadow-sm shadow-violet-600/25 hover:bg-violet-500 transition active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
-            New Design
-          </Link>
-          <Link 
-            href="/dashboard/bulk"
-            className="px-5 py-2.5 bg-muted text-foreground border border-border rounded-xl font-bold text-sm hover:bg-border/50 transition active:scale-95 flex items-center gap-2"
-          >
-            <Zap className="h-4 w-4 text-violet-500" />
-            Bulk Create
+            New certificate
           </Link>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Getting started — shown until the first verifiable batch exists */}
+      {verifiable === 0 && (
+        <section className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.07] to-transparent p-6">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <h2 className="text-base font-semibold text-foreground">Getting started</h2>
+            <span className="text-xs font-medium text-muted-foreground">
+              {steps.filter((s) => s.done).length} of {steps.length} done
+            </span>
+          </div>
+          <ol className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {steps.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <li key={step.title} className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                        step.done ? "bg-emerald-500/15 text-emerald-500" : "bg-violet-500/10 text-violet-500"
+                      }`}
+                    >
+                      {step.done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                    </span>
+                    <span className="text-xs font-medium text-muted-foreground">Step {i + 1}</span>
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{step.body}</p>
+                </li>
+              );
+            })}
+          </ol>
+          <Link
+            href="/dashboard/certificates"
+            className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:underline"
+          >
+            Open the editor <ArrowRight className="h-4 w-4" />
+          </Link>
+        </section>
+      )}
+
+      {/* Stats */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Your numbers">
         {stats.map((stat) => {
           const Icon = stat.icon;
-
           return (
-            <div
-              key={stat.title}
-              className="group relative rounded-2xl border border-border bg-card p-6 shadow-sm transition-all duration-200 hover:border-violet-500/50"
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className="group rounded-2xl border border-border bg-card p-5 transition-colors hover:border-violet-500/40"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg shadow-inherit/10`}
-                >
-                  <Icon className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{stat.description}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
+                <Icon className="h-4 w-4 text-muted-foreground/60 group-hover:text-violet-500 transition-colors" />
               </div>
-
-              <div>
-                <h4 className="text-3xl font-bold text-foreground tracking-tight">{stat.value}</h4>
-                <p className="text-sm font-semibold text-muted-foreground mt-1">{stat.title}</p>
-              </div>
-            </div>
+              <p className="mt-3 text-3xl font-semibold text-foreground tracking-tight tabular-nums">{stat.value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{stat.note}</p>
+            </Link>
           );
         })}
       </section>
 
-      {/* Recent Activity & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-lg font-bold text-foreground flex items-center gap-2.5">
-              <Clock className="h-5 w-5 text-violet-500" />
-              Recent Batches
-            </h3>
-            <Link href="/dashboard/history" className="text-xs font-bold text-violet-600 hover:text-violet-700 flex items-center gap-1 group">
-              View All History
-              <ArrowRight className="h-3 w-3 transition group-hover:translate-x-1" />
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
+        {/* Recent batches */}
+        <section className="xl:col-span-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-foreground">Recent batches</h2>
+            <Link
+              href="/dashboard/history"
+              className="text-sm font-medium text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1"
+            >
+              View all <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
             {recentBatches.length > 0 ? (
-              <div className="divide-y divide-border">
+              <ul className="divide-y divide-border">
                 {recentBatches.map((batch) => (
-                  <div key={batch.id} className="p-6 flex items-center justify-between hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-6">
-                      <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
-                        <FileText className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <p className="text-base font-bold text-foreground leading-none">{batch.name}</p>
-                        <p className="text-xs text-muted-foreground font-semibold mt-2">
-                          {batch.count} certificates generated • Template: {batch.templateName}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-foreground">
-                        {new Date(batch.createdAt).toLocaleDateString()}
-                      </p>
-                      <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] mt-2 block">
-                        {batch.status}
+                  <li key={batch.id}>
+                    <Link
+                      href={`/dashboard/history/${batch.id}`}
+                      className="flex items-center gap-4 px-5 py-4 hover:bg-muted/50 transition-colors"
+                    >
+                      <span className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-[10px] font-bold text-violet-600 dark:text-violet-300">
+                        {batch.format}
                       </span>
-                    </div>
-                  </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-foreground">{batch.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground mt-0.5">
+                          {plural(batch.count, "certificate")} · {batch.templateName}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block text-xs text-muted-foreground">{relativeDay(batch.createdAt)}</span>
+                        <StatusPill status={batch.status} />
+                      </span>
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             ) : (
-              <div className="py-24 text-center">
-                <div className="h-20 w-20 bg-muted rounded-3xl flex items-center justify-center mx-auto mb-6">
-                  <Clock className="h-10 w-10 text-muted-foreground/20" />
+              <div className="px-6 py-16 text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <FolderOpen className="h-5 w-5" />
                 </div>
-                <h4 className="text-lg font-bold text-foreground">No recent activity found</h4>
-                <p className="text-sm text-muted-foreground mt-1">Start generating certificates to see your history here.</p>
+                <h3 className="text-sm font-semibold text-foreground">No batches yet</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Every export you make shows up here, ready to look up later.
+                </p>
               </div>
             )}
           </div>
         </section>
 
-        <section className="space-y-4">
-          <h3 className="text-lg font-bold text-foreground px-1">Resource Center</h3>
-          <div className="grid grid-cols-1 gap-4">
-            <Link 
+        {/* Recent templates */}
+        <section className="xl:col-span-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-foreground">Your templates</h2>
+            <Link
               href="/dashboard/templates"
-              className="p-5 rounded-2xl border border-border bg-card shadow-sm flex items-center justify-between group cursor-pointer hover:border-violet-500/50 transition-all"
+              className="text-sm font-medium text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1"
             >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground group-hover:text-violet-500 transition-colors">
-                  <Layers3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-foreground">Template Library</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">Manage your designs</p>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+              View all <ArrowRight className="h-3.5 w-3.5" />
             </Link>
-
-            <Link 
-              href="/dashboard/verification"
-              className="p-5 rounded-2xl border border-border bg-card shadow-sm flex items-center justify-between group cursor-pointer hover:border-violet-500/50 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground group-hover:text-violet-500 transition-colors">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-foreground">Verification Beta</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">Blockchain validation</p>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-            </Link>
-
-            <div className="p-8 rounded-2xl bg-slate-900 border border-white/5 text-white overflow-hidden relative shadow-lg">
-              <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                <CheckCircle2 className="h-24 w-24" />
-              </div>
-              <div className="relative z-10">
-                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-1.5">Platform Update</p>
-                <h4 className="text-xl font-bold mb-4">v2.5 Terminal Live</h4>
-                <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                  We've rolled out a major update to the editor workspace and database infrastructure. Enjoy faster generation and reliable persistence.
-                </p>
-                <button className="mt-6 w-full py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition">
-                  View Changelog
-                </button>
-              </div>
-            </div>
           </div>
+
+          {recentTemplates.length > 0 ? (
+            <ul className="space-y-3">
+              {recentTemplates.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={`/dashboard/certificates?id=${t.id}`}
+                    className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-3 hover:border-violet-500/40 transition-colors"
+                  >
+                    <span className="block h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                      <TemplatePreview src={t.imagePath} name={t.name} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-foreground">{t.name}</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">
+                        {t.category} · edited {relativeDayInline(t.updatedAt)}
+                      </span>
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-violet-500 transition-colors mr-1" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
+              <h3 className="text-sm font-semibold text-foreground">No templates saved</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Save a design in the editor to reuse it for the next event.
+              </p>
+              <Link
+                href="/dashboard/certificates"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                Create your first template <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </section>
       </div>
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const tone =
+    status === "Completed"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : status === "Processing"
+        ? "text-sky-600 dark:text-sky-400"
+        : "text-rose-600 dark:text-rose-400";
+  return (
+    <span className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${tone}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {status}
+    </span>
   );
 }

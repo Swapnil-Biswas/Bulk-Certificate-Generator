@@ -1,8 +1,12 @@
-import { getSession } from "@/lib/auth/get-session";
-import { prisma } from "@/lib/prisma";
-import { History, Download, ExternalLink, Search, FileText, Calendar } from "lucide-react";
+import { History, Search, ChevronRight, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+
+import { getSession } from "@/lib/auth/get-session";
+import { prisma } from "@/lib/prisma";
+import { plural, shortDate } from "@/lib/utils/format";
+
+const statuses = ["All", "Completed", "Processing", "Failed"];
 
 export default async function HistoryPage({
   searchParams,
@@ -10,12 +14,11 @@ export default async function HistoryPage({
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
   const session = await getSession();
-
-  if (!session) {
-    redirect("/login");
-  }
+  if (!session) redirect("/login");
 
   const { q, status } = await searchParams;
+  const activeStatus = status || "All";
+  const filtered = !!q || activeStatus !== "All";
 
   const batches = await prisma.certificateBatch.findMany({
     where: {
@@ -26,48 +29,50 @@ export default async function HistoryPage({
           { templateName: { contains: q, mode: "insensitive" } },
         ],
       }),
-      ...(status && status !== "All" && {
-        status: status,
-      }),
+      ...(activeStatus !== "All" && { status: activeStatus }),
     },
-    orderBy: {
-      createdAt: "desc",
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      templateName: true,
+      format: true,
+      count: true,
+      status: true,
+      createdAt: true,
+      _count: { select: { certificates: true } },
     },
   });
 
+  const total = batches.reduce((sum, b) => sum + b.count, 0);
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Generation Registry</h1>
-          <p className="text-sm text-muted-foreground font-medium mt-1">
-            Audit and retrieve your historically generated certificate batches.
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">History</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            Every batch you have exported. Open one to see its certificates and verification links.
           </p>
         </div>
-
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted border border-border rounded-xl">
-          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Batches Logged</span>
-          <div className="h-4 w-px bg-border mx-1" />
-          <span className="text-sm font-bold text-foreground leading-none">{batches.length}</span>
-        </div>
+        <p className="text-sm text-muted-foreground tabular-nums">
+          {plural(batches.length, "batch", "batches")} · {plural(total, "certificate")}
+        </p>
       </div>
 
-      {/* Filters Bar */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between p-2 rounded-2xl bg-muted border border-border">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto p-1 no-scrollbar">
-          {["All", "Completed", "Processing", "Failed"].map((s) => {
-            const isActive = (status || "All") === s;
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {statuses.map((s) => {
+            const isActive = activeStatus === s;
             return (
               <Link
                 key={s}
-                href={`?${new URLSearchParams({
-                  ...(q && { q }),
-                  status: s,
-                })}`}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                href={`?${new URLSearchParams({ ...(q && { q }), ...(s !== "All" && { status: s }) })}`}
+                aria-current={isActive ? "true" : undefined}
+                className={`h-9 px-3.5 inline-flex items-center rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                   isActive
-                    ? "bg-card text-violet-600 shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
                 {s}
@@ -76,106 +81,102 @@ export default async function HistoryPage({
           })}
         </div>
 
-        <div className="relative w-full lg:w-80 p-1">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
-          <form>
-            <input
-              type="text"
-              name="q"
-              defaultValue={q}
-              placeholder="Filter batch registry..."
-              className="w-full rounded-xl border border-border bg-card py-2 pl-10 pr-4 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition shadow-sm"
-            />
-          </form>
-        </div>
+        <form className="relative w-full lg:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          {activeStatus !== "All" && <input type="hidden" name="status" value={activeStatus} />}
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="Search by batch or template"
+            aria-label="Search batches"
+            className="w-full h-10 rounded-xl border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition"
+          />
+        </form>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-muted/50 border-b border-border">
-                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Entity / Batch</th>
-                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Protocol</th>
-                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Unit Count</th>
-                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Deployment</th>
-                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right px-8">Audit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {batches.map((batch) => (
-                <tr key={batch.id} className="hover:bg-muted/30 transition-colors group">
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 transition-transform group-hover:scale-110">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <span className="text-sm font-bold text-foreground block leading-none">{batch.name}</span>
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tighter opacity-60">Source: {batch.templateName}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <span className="text-[10px] font-black text-muted-foreground bg-muted px-2 py-0.5 rounded border border-border">
-                      {batch.format}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <span className="text-sm font-bold text-foreground">
-                      {batch.count}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    <div className="flex flex-col items-center gap-1.5">
-                       <span className="text-xs font-bold text-muted-foreground tabular-nums">
-                         {new Date(batch.createdAt).toLocaleDateString()}
-                       </span>
-                       <div className="flex items-center gap-1.5">
-                          <div className={`h-1.5 w-1.5 rounded-full ${
-                            batch.status === "Completed" ? "bg-emerald-500" : 
-                            batch.status === "Processing" ? "bg-blue-500 animate-pulse" : "bg-rose-500"
-                          }`} />
-                          <span className={`text-[9px] font-black uppercase tracking-widest ${
-                            batch.status === "Completed" ? "text-emerald-500" : 
-                            batch.status === "Processing" ? "text-blue-500" : "text-rose-500"
-                          }`}>
-                            {batch.status}
-                          </span>
-                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-right px-8">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border" title="Download Export">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border" title="Audit Details">
-                        <ExternalLink className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        {batches.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th scope="col" className="px-5 py-3 font-medium">Batch</th>
+                  <th scope="col" className="px-5 py-3 font-medium">Format</th>
+                  <th scope="col" className="px-5 py-3 font-medium text-right">Certificates</th>
+                  <th scope="col" className="px-5 py-3 font-medium">Created</th>
+                  <th scope="col" className="px-5 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-5 py-3 font-medium"><span className="sr-only">Open</span></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {batches.length === 0 && (
-            <div className="py-32 text-center bg-muted/10">
-              <div className="h-16 w-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-6 text-muted-foreground/20 shadow-inner">
-                <History className="h-8 w-8" />
-              </div>
-              <h3 className="text-lg font-bold text-foreground tracking-tight">Registry empty</h3>
-              <p className="mt-2 text-xs text-muted-foreground font-medium max-w-xs mx-auto leading-relaxed">
-                {q || status !== "All"
-                  ? "No historical data matched the requested filter parameters."
-                  : "Generation history is empty. Initialize a new batch to start logging registry entries."}
-              </p>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {batches.map((batch) => (
+                  <tr key={batch.id} className="group relative hover:bg-muted/40 transition-colors">
+                    <td className="px-5 py-4">
+                      <Link href={`/dashboard/history/${batch.id}`} className="block after:absolute after:inset-0">
+                        <span className="block font-semibold text-foreground">{batch.name}</span>
+                        <span className="block text-xs text-muted-foreground mt-0.5">{batch.templateName}</span>
+                      </Link>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="rounded-md border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        {batch.format}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-right font-medium text-foreground tabular-nums">
+                      {batch.count.toLocaleString("en-US")}
+                    </td>
+                    <td className="px-5 py-4 text-muted-foreground whitespace-nowrap">{shortDate(batch.createdAt)}</td>
+                    <td className="px-5 py-4">
+                      <span className="inline-flex items-center gap-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            batch.status === "Completed"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : batch.status === "Processing"
+                                ? "text-sky-600 dark:text-sky-400"
+                                : "text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full bg-current ${batch.status === "Processing" ? "animate-pulse" : ""}`} />
+                          {batch.status}
+                        </span>
+                        {batch._count.certificates > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Certificates in this batch have public verification pages">
+                            <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
+                            Verifiable
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <ChevronRight className="inline h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="py-24 px-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <History className="h-5 w-5" />
             </div>
-          )}
-        </div>
+            <h3 className="text-base font-semibold text-foreground">
+              {filtered ? "No batches match" : "No batches yet"}
+            </h3>
+            <p className="mt-1.5 text-sm text-muted-foreground max-w-sm mx-auto">
+              {filtered
+                ? "Try a different search or status."
+                : "Export certificates from the editor and each batch will be listed here."}
+            </p>
+            {filtered && (
+              <Link href="/dashboard/history" className="mt-5 inline-block text-sm font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+                Clear filters
+              </Link>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

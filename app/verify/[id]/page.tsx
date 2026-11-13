@@ -1,170 +1,241 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ShieldCheck, ShieldAlert, ShieldQuestion, ExternalLink, Check, X, Minus } from "lucide-react";
+
 import { prisma } from "@/lib/prisma";
 import { hashData, createMerkleTree } from "@/lib/utils/crypto";
 import { verifyRootOnChain } from "@/lib/blockchain/polygon";
-import { ShieldCheck, ShieldAlert, ExternalLink, Calendar, FileText, User, CheckCircle2 } from "lucide-react";
-import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { VerifyLookup } from "@/components/verify-lookup";
+import { shortDate } from "@/lib/utils/format";
 
-async function getCertificate(id: string) {
-  return await prisma.certificate.findUnique({
-    where: { id },
-    include: {
-      batch: true,
-    },
-  });
+export const metadata: Metadata = {
+  title: "Verify a certificate",
+  robots: { index: false },
+};
+
+function recipientOf(metadata: unknown): string | null {
+  if (metadata && typeof metadata === "object") {
+    const m = metadata as Record<string, unknown>;
+    for (const key of ["name", "Name", "names", "Names", "Full Name", "fullname"]) {
+      if (typeof m[key] === "string" && m[key]) return m[key] as string;
+    }
+    const first = Object.values(m).find((v) => typeof v === "string" && v);
+    if (typeof first === "string") return first;
+  }
+  return null;
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#07070b] text-slate-300 font-sans selection:bg-violet-500/30">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 h-[420px] bg-[radial-gradient(60%_100%_at_50%_0%,rgba(124,92,255,0.14),transparent)]"
+      />
+      <header className="relative mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
+        <Link href="/" className="flex items-center gap-2.5">
+          <Logo iconClassName="h-8 w-8" />
+          <span className="text-base font-semibold tracking-tight text-white">CertGen</span>
+        </Link>
+        <span className="text-xs text-slate-500">Certificate verification</span>
+      </header>
+      <main className="relative mx-auto max-w-3xl px-6 pb-20">{children}</main>
+    </div>
+  );
 }
 
 export default async function VerifyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const cert = await getCertificate(id);
+  const cert = await prisma.certificate.findUnique({ where: { id }, include: { batch: true } });
 
   if (!cert) {
     return (
-      <div className="min-h-screen bg-[#02040a] flex flex-col items-center justify-center p-6 text-center">
-        <ShieldAlert className="h-16 w-16 text-rose-500 mb-6" />
-        <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Certificate Not Found</h1>
-        <p className="text-slate-500 mt-4 max-w-sm">The requested identifier does not exist in our registry. This credential may be invalid or forged.</p>
-        <Link href="/" className="mt-8 text-xs font-black text-violet-500 uppercase tracking-widest hover:underline">Return to Home</Link>
-      </div>
+      <Shell>
+        <section className="mt-10 rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
+          <ShieldQuestion className="h-10 w-10 text-amber-400" />
+          <h1 className="mt-5 text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+            No certificate with this ID
+          </h1>
+          <p className="mt-3 max-w-xl text-slate-400 leading-relaxed">
+            We have no record of <code className="font-mono text-slate-200 break-all">{id}</code>. Check the ID for typos, or scan the QR code on the certificate again. If it still isn&apos;t found, the certificate was not issued through CertGen.
+          </p>
+          <div className="mt-8 max-w-xl">
+            <VerifyLookup variant="marketing" />
+          </div>
+        </section>
+      </Shell>
     );
   }
 
-  // 1. Perform Local Cryptographic Verification
-  const reconstructedHash = hashData(cert.id + JSON.stringify(cert.metadata));
-  const isHashValid = reconstructedHash === cert.hash;
+  // 1. The stored details still produce the fingerprint recorded at issue time.
+  const hashValid = hashData(cert.id + JSON.stringify(cert.metadata)) === cert.hash;
 
-  // 2. Perform On-Chain Verification
-  let blockchainData = { anchored: false, timestamp: 0, batchURI: "" };
-  if (cert.batch.merkleRoot && cert.batch.transactionHash) {
-    blockchainData = await verifyRootOnChain(cert.batch.merkleRoot);
+  // 2. That fingerprint belongs to the batch's Merkle root.
+  let inBatch: boolean | null = null;
+  if (cert.batch.merkleRoot && Array.isArray(cert.merkleProof)) {
+    try {
+      inBatch = createMerkleTree([]).verify(cert.merkleProof as string[], cert.hash, cert.batch.merkleRoot);
+    } catch {
+      inBatch = false;
+    }
   }
 
-  const isFullyVerified = isHashValid && cert.status === "VALID" && blockchainData.anchored;
+  // 3. The batch root is anchored on Polygon (only when the issuer anchored it).
+  let anchored: boolean | null = null;
+  if (cert.batch.merkleRoot && cert.batch.transactionHash) {
+    anchored = (await verifyRootOnChain(cert.batch.merkleRoot)).anchored;
+  }
+
+  const revoked = cert.status !== "VALID";
+  const intact = hashValid && inBatch !== false;
+  const state: "verified" | "revoked" | "failed" = revoked ? "revoked" : intact ? "verified" : "failed";
+
+  const tone = {
+    verified: { ring: "border-emerald-400/25", glow: "bg-emerald-400/10", text: "text-emerald-300", Icon: ShieldCheck },
+    revoked: { ring: "border-amber-400/25", glow: "bg-amber-400/10", text: "text-amber-300", Icon: ShieldAlert },
+    failed: { ring: "border-rose-400/25", glow: "bg-rose-400/10", text: "text-rose-300", Icon: ShieldAlert },
+  }[state];
+
+  const headline = {
+    verified: "This certificate is authentic",
+    revoked: "This certificate has been revoked",
+    failed: "This certificate could not be verified",
+  }[state];
+
+  const summary = {
+    verified: anchored
+      ? "Its details match the issuer's record exactly, and that record is anchored on the Polygon blockchain."
+      : "Its details match the record created when it was issued and have not been changed since.",
+    revoked: "It was issued through CertGen, but the issuer has since marked it as no longer valid.",
+    failed: "The details on record no longer match the fingerprint created at issue. Treat this certificate with caution.",
+  }[state];
+
+  const checks: { label: string; detail: string; result: boolean | null }[] = [
+    {
+      label: "Details unchanged",
+      detail: "The recipient details still match the SHA-256 fingerprint taken at issue.",
+      result: hashValid,
+    },
+    {
+      label: "Part of the issued batch",
+      detail: "The fingerprint is included in the batch's Merkle root.",
+      result: inBatch,
+    },
+    {
+      label: "Anchored on Polygon",
+      detail:
+        anchored === null
+          ? "The issuer did not anchor this batch on-chain. The checks above still apply."
+          : "The batch's Merkle root is recorded on the Polygon blockchain.",
+      result: anchored,
+    },
+  ];
+
+  const recipient = recipientOf(cert.metadata);
+  const extra = Object.entries((cert.metadata ?? {}) as Record<string, unknown>).filter(
+    ([, v]) => typeof v === "string" && v && v !== recipient
+  ) as [string, string][];
 
   return (
-    <div className="min-h-screen bg-[#02040a] text-slate-300 p-6 lg:p-12 font-sans selection:bg-violet-500/30">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <header className="flex flex-col items-center text-center space-y-4">
-          <Logo iconClassName="h-16 w-16 mb-4" />
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
-             Official Verification Registry
-          </div>
-          <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase leading-none">
-            Credential Authenticity
-          </h1>
-        </header>
-
-        {/* Status Card */}
-        <div className={`relative overflow-hidden rounded-[2.5rem] border ${isFullyVerified ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-rose-500/30 bg-rose-500/5'} p-8 md:p-12 shadow-2xl transition-all duration-700`}>
-          <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 md:gap-12">
-            <div className={`flex h-24 w-24 shrink-0 items-center justify-center rounded-full ${isFullyVerified ? 'bg-emerald-500/20 text-emerald-500' : 'bg-rose-500/20 text-rose-500'} animate-pulse`}>
-               {isFullyVerified ? <ShieldCheck className="h-12 w-12" /> : <ShieldAlert className="h-12 w-12" />}
-            </div>
-            
-            <div className="flex-1 text-center md:text-left space-y-3">
-              <h2 className={`text-3xl font-black uppercase tracking-tight ${isFullyVerified ? 'text-emerald-500' : 'text-rose-500'}`}>
-                {isFullyVerified ? 'Verified & Authentic' : 'Verification Warning'}
-              </h2>
-              <p className="text-slate-400 font-medium leading-relaxed">
-                {isFullyVerified 
-                  ? 'This certificate has been cryptographically verified and is permanently anchored on the Polygon blockchain.'
-                  : 'We could not fully verify this credential. It may have been modified or is not yet anchored on-chain.'}
-              </p>
-              <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
-                <span className="px-3 py-1 rounded-md bg-black/40 border border-white/5 text-[9px] font-black uppercase tracking-widest text-slate-500">
-                  ID: {cert.id}
-                </span>
-                <span className={`px-3 py-1 rounded-md border text-[9px] font-black uppercase tracking-widest ${isHashValid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500'}`}>
-                  Hash: {isHashValid ? 'Valid' : 'Invalid'}
-                </span>
-                <span className={`px-3 py-1 rounded-md border text-[9px] font-black uppercase tracking-widest ${blockchainData.anchored ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-slate-800 border-white/5 text-slate-500'}`}>
-                  Blockchain: {blockchainData.anchored ? 'Confirmed' : 'Pending'}
-                </span>
-              </div>
-            </div>
-          </div>
+    <Shell>
+      <section className={`relative mt-6 overflow-hidden rounded-3xl border ${tone.ring} bg-white/[0.03] p-8 sm:p-10`}>
+        <div aria-hidden className={`absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl ${tone.glow}`} />
+        <div className="relative">
+          <span className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl ${tone.glow} ${tone.text}`}>
+            <tone.Icon className="h-7 w-7" />
+          </span>
+          <h1 className="mt-6 text-2xl sm:text-4xl font-semibold tracking-tight text-white">{headline}</h1>
+          <p className="mt-3 max-w-xl text-slate-400 leading-relaxed">{summary}</p>
         </div>
+      </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Recipient Details */}
-          <div className="p-8 rounded-[2rem] border border-white/5 bg-white/[0.02] space-y-8">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 border-b border-white/5 pb-4">Recipient Identity</h3>
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-slate-500">
-                  <User className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Full Name</p>
-                  <p className="text-lg font-bold text-white uppercase">{(cert.metadata as any).name || (cert.metadata as any).Name || 'N/A'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-slate-500">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Issuing Entity</p>
-                  <p className="text-lg font-bold text-white uppercase">{cert.batch.templateName}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-slate-500">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Issuance Date</p>
-                  <p className="text-lg font-bold text-white uppercase">{new Date(cert.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}</p>
-                </div>
-              </div>
+      <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
+        <h2 className="text-sm font-medium text-slate-500">Issued to</h2>
+        <p className="mt-2 font-serif text-4xl sm:text-5xl text-white leading-tight break-words">{recipient ?? "—"}</p>
+
+        <dl className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-6 border-t border-white/10 pt-8">
+          <div>
+            <dt className="text-sm text-slate-500">Certificate</dt>
+            <dd className="mt-1 text-base font-medium text-white">{cert.batch.templateName}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-slate-500">Issued on</dt>
+            <dd className="mt-1 text-base font-medium text-white">{shortDate(cert.createdAt)}</dd>
+          </div>
+          {extra.slice(0, 6).map(([key, value]) => (
+            <div key={key}>
+              <dt className="text-sm text-slate-500 capitalize">{key}</dt>
+              <dd className="mt-1 text-base font-medium text-white break-words">{value}</dd>
             </div>
+          ))}
+          <div className="sm:col-span-2">
+            <dt className="text-sm text-slate-500">Certificate ID</dt>
+            <dd className="mt-1 font-mono text-sm text-slate-200 break-all">{cert.id}</dd>
           </div>
+        </dl>
+      </section>
 
-          {/* Technical Protocol */}
-          <div className="p-8 rounded-[2rem] border border-white/5 bg-white/[0.02] space-y-8">
-             <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-600 border-b border-white/5 pb-4">Technical Protocol</h3>
-             <div className="space-y-6">
-               <div>
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Cryptographic Hash (SHA-256)</p>
-                  <p className="text-[10px] font-mono font-bold text-slate-400 break-all bg-black/40 p-3 rounded-lg border border-white/5 leading-relaxed">
-                    {cert.hash}
-                  </p>
-               </div>
-               
-               {blockchainData.anchored && (
-                 <div>
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Polygon Transaction</p>
-                    <a 
-                      href={`https://amoy.polygonscan.com/tx/${cert.batch.transactionHash}`}
-                      target="_blank"
-                      className="group flex items-center justify-between bg-violet-600/10 border border-violet-500/20 p-4 rounded-xl hover:bg-violet-600/20 transition-all"
-                    >
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-4 w-4 text-violet-500" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest">View on Explorer</span>
-                      </div>
-                      <ExternalLink className="h-4 w-4 text-slate-500 group-hover:text-white transition-colors" />
-                    </a>
-                 </div>
-               )}
+      <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.03] p-8 sm:p-10">
+        <h2 className="text-lg font-semibold text-white">What was checked</h2>
+        <ul className="mt-6 space-y-5">
+          {checks.map((check) => (
+            <li key={check.label} className="flex gap-4">
+              <span
+                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                  check.result === true
+                    ? "bg-emerald-400/15 text-emerald-300"
+                    : check.result === false
+                      ? "bg-rose-400/15 text-rose-300"
+                      : "bg-white/10 text-slate-400"
+                }`}
+              >
+                {check.result === true ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : check.result === false ? (
+                  <X className="h-3.5 w-3.5" />
+                ) : (
+                  <Minus className="h-3.5 w-3.5" />
+                )}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-white">
+                  {check.label}
+                  <span className="sr-only">
+                    : {check.result === true ? "passed" : check.result === false ? "failed" : "not applicable"}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-sm text-slate-400 leading-relaxed">{check.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
 
-               <div className="pt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Immutability Guaranteed</p>
-                  </div>
-                  <p className="text-[10px] text-slate-600 font-medium leading-relaxed italic">
-                    This credential is mathematically coupled to the Polygon Mainnet through a Merkle Root anchor, ensuring absolute protection against unauthorized modification.
-                  </p>
-               </div>
-             </div>
-          </div>
+        <div className="mt-8 border-t border-white/10 pt-6">
+          <p className="text-sm text-slate-500">Fingerprint (SHA-256)</p>
+          <p className="mt-2 rounded-xl border border-white/10 bg-black/40 p-3.5 font-mono text-xs text-slate-300 break-all leading-relaxed">
+            {cert.hash}
+          </p>
+          {anchored && cert.batch.transactionHash && (
+            <a
+              href={`https://amoy.polygonscan.com/tx/${cert.batch.transactionHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-violet-300 hover:text-violet-200"
+            >
+              View the Polygon transaction <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
         </div>
+      </section>
 
-        <footer className="pt-12 border-t border-white/5 text-center opacity-30">
-          <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.5em]">CertGen Secure Protocol © 2026</p>
-        </footer>
-      </div>
-    </div>
+      <p className="mt-8 text-center text-sm text-slate-500">
+        Issued with{" "}
+        <Link href="/" className="text-slate-300 hover:text-white underline underline-offset-4">
+          CertGen
+        </Link>
+        . Anyone can verify a certificate — no account needed.
+      </p>
+    </Shell>
   );
 }

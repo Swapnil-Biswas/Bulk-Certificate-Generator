@@ -1,18 +1,14 @@
-import { getSession } from "@/lib/auth/get-session";
-import { prisma } from "@/lib/prisma";
-import { Layers3, Plus, Search, MoreVertical, Filter } from "lucide-react";
+import { Layers3, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import TemplateCardActions from "@/components/template-card-actions";
 
-const categories = [
-  "All",
-  "Participation",
-  "Achievement",
-  "Workshop",
-  "Appreciation",
-  "Custom",
-];
+import { getSession } from "@/lib/auth/get-session";
+import { prisma } from "@/lib/prisma";
+import TemplateCardActions from "@/components/template-card-actions";
+import { TemplatePreview } from "@/components/template-preview";
+import { relativeDayInline } from "@/lib/utils/format";
+
+const categories = ["All", "Participation", "Achievement", "Workshop", "Appreciation", "Custom"];
 
 export default async function TemplatesPage({
   searchParams,
@@ -20,66 +16,53 @@ export default async function TemplatesPage({
   searchParams: Promise<{ q?: string; category?: string }>;
 }) {
   const session = await getSession();
-
-  if (!session) {
-    redirect("/login");
-  }
+  if (!session) redirect("/login");
 
   const { q, category } = await searchParams;
+  const activeCategory = category || "All";
+  const filtered = !!q || activeCategory !== "All";
 
   const templates = await prisma.certificateTemplate.findMany({
     where: {
       userId: session.user.id,
-      ...(q && {
-        name: {
-          contains: q,
-          mode: "insensitive",
-        },
-      }),
-      ...(category && category !== "All" && {
-        category: category,
-      }),
+      ...(q && { name: { contains: q, mode: "insensitive" } }),
+      ...(activeCategory !== "All" && { category: activeCategory }),
     },
-    orderBy: {
-      updatedAt: "desc",
-    },
+    orderBy: { updatedAt: "desc" },
   });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Design Library</h1>
-          <p className="text-sm text-muted-foreground font-medium mt-1">
-            Manage and reuse your custom certificate designs.
+          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">Templates</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            Saved designs you can reuse for the next event or cohort.
           </p>
         </div>
 
         <Link
           href="/dashboard/certificates"
-          className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 font-bold text-white text-sm shadow-sm transition hover:bg-violet-700 active:scale-95"
+          className="h-10 px-4 inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white shadow-sm shadow-violet-600/25 hover:bg-violet-500 transition active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" />
-          Create New Design
+          New template
         </Link>
       </div>
 
-      {/* Filters Bar */}
-      <div className="flex flex-col lg:flex-row gap-4 items-center justify-between p-2 rounded-xl bg-muted/50 border border-border">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto p-1 no-scrollbar">
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar -mx-1 px-1">
           {categories.map((cat) => {
-            const isActive = (category || "All") === cat;
+            const isActive = activeCategory === cat;
             return (
               <Link
                 key={cat}
-                href={`?${new URLSearchParams({
-                  ...(q && { q }),
-                  category: cat,
-                })}`}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                href={`?${new URLSearchParams({ ...(q && { q }), ...(cat !== "All" && { category: cat }) })}`}
+                aria-current={isActive ? "true" : undefined}
+                className={`h-9 px-3.5 inline-flex items-center rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                   isActive
-                    ? "bg-card text-violet-600 shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
                 {cat}
@@ -88,89 +71,84 @@ export default async function TemplatesPage({
           })}
         </div>
 
-        <div className="relative w-full lg:w-80 p-1">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
-          <form>
-            <input
-              type="text"
-              name="q"
-              defaultValue={q}
-              placeholder="Search library..."
-              className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition shadow-sm"
-            />
-          </form>
-        </div>
+        <form className="relative w-full lg:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          {activeCategory !== "All" && <input type="hidden" name="category" value={activeCategory} />}
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="Search templates"
+            aria-label="Search templates"
+            className="w-full h-10 rounded-xl border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition"
+          />
+        </form>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {templates.map((template) => (
-          <div
+          <article
             key={template.id}
-            className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm transition-all duration-300 hover:shadow-xl hover:border-violet-500/30"
+            className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all duration-300 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5"
           >
-            <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-muted">
-              {/* Template Preview Placeholder */}
-              <div className="flex h-full w-full items-center justify-center text-muted-foreground/20">
-                <Layers3 className="h-16 w-16 transition-transform duration-500 group-hover:scale-110" />
-              </div>
-
-              {/* Category Badge */}
-              <div className="absolute top-3 left-3">
-                <span className="px-2 py-0.5 rounded-md bg-card/90 backdrop-blur-sm text-[9px] font-black uppercase tracking-widest text-foreground shadow-sm ring-1 ring-black/5">
-                  {template.category}
+            <Link
+              href={`/dashboard/certificates?id=${template.id}`}
+              className="relative block aspect-[1.414/1] overflow-hidden bg-muted"
+              aria-label={`Open ${template.name} in the editor`}
+            >
+              <TemplatePreview
+                src={template.imagePath}
+                name={template.name}
+                className="transition-transform duration-500 group-hover:scale-[1.03]"
+              />
+              <span className="absolute top-3 left-3 rounded-md bg-black/60 backdrop-blur px-2 py-1 text-[11px] font-medium text-white">
+                {template.category}
+              </span>
+              <span className="absolute inset-0 flex items-center justify-center bg-slate-950/50 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300">
+                <span className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900 translate-y-1 group-hover:translate-y-0 transition-transform duration-300">
+                  Open in editor
                 </span>
-              </div>
+              </span>
+            </Link>
 
-              {/* Hover Actions */}
-              <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 backdrop-blur-[2px]">
-                <Link
-                  href={`/dashboard/certificates?id=${template.id}`}
-                  className="rounded-lg bg-white px-5 py-2 text-xs font-bold text-slate-900 hover:bg-slate-50 transition transform translate-y-2 group-hover:translate-y-0 duration-300"
-                >
-                  Edit Template
-                </Link>
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-foreground" title={template.name}>
+                  {template.name}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Edited {relativeDayInline(template.updatedAt)}
+                </p>
               </div>
+              <TemplateCardActions templateId={template.id} templateName={template.name} />
             </div>
-
-            <div className="mt-4 px-1 pb-1">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-foreground truncate max-w-[180px]">
-                    {template.name}
-                  </h3>
-                  <p className="text-[10px] text-muted-foreground font-semibold mt-1 uppercase tracking-tighter">
-                    Revised {new Date(template.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-                
-                <TemplateCardActions templateId={template.id} />
-              </div>
-            </div>
-          </div>
+          </article>
         ))}
 
         {templates.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/20 py-32 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-card shadow-sm mb-6">
-              <Layers3 className="h-8 w-8 text-muted-foreground/30" />
+          <div className="col-span-full flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-24 px-6 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground mb-4">
+              <Layers3 className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-bold text-foreground tracking-tight">
-              Empty design library
+            <h3 className="text-base font-semibold text-foreground">
+              {filtered ? "No templates match" : "No templates yet"}
             </h3>
-            <p className="mt-2 text-xs text-muted-foreground font-medium max-w-xs mx-auto leading-relaxed">
-              {q || category !== "All" 
-                ? "No templates match your active filters. Try resetting them."
-                : "You haven't designed any templates yet. Start by creating your first workspace design."}
+            <p className="mt-1.5 text-sm text-muted-foreground max-w-sm">
+              {filtered
+                ? "Try a different search or category."
+                : "Design a certificate in the editor and save it — it will appear here for reuse."}
             </p>
-            {!q && category === "All" && (
+            {filtered ? (
+              <Link href="/dashboard/templates" className="mt-5 text-sm font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+                Clear filters
+              </Link>
+            ) : (
               <Link
                 href="/dashboard/certificates"
-                className="mt-8 px-6 py-2.5 rounded-xl bg-foreground text-background font-bold text-xs hover:scale-105 transition-transform"
+                className="mt-5 h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-500 transition"
               >
-                Create Template
+                <Plus className="h-4 w-4" />
+                Create a template
               </Link>
             )}
           </div>

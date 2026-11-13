@@ -17,6 +17,33 @@ import {
 } from "react-konva";
 
 import useImage from "use-image";
+
+// Self-hosted faces for every font offered in the editor, so the canvas and exports render them.
+import "@fontsource/great-vibes";
+import "@fontsource/pacifico";
+import "@fontsource/dancing-script";
+import "@fontsource/playfair-display";
+import "@fontsource/montserrat";
+import "@fontsource/poppins";
+import "@fontsource/raleway";
+import "@fontsource/lora";
+import "@fontsource/oswald";
+import "@fontsource/cinzel";
+import "@fontsource/cormorant-garamond";
+import "@fontsource/merriweather";
+import "@fontsource/josefin-sans";
+import "@fontsource/bebas-neue";
+import "@fontsource/abril-fatface";
+import "@fontsource/lobster";
+import "@fontsource/allura";
+import "@fontsource/alex-brush";
+import "@fontsource/sacramento";
+import "@fontsource/parisienne";
+import "@fontsource/satisfy";
+import "@fontsource/tangerine";
+import "@fontsource/kaushan-script";
+import "@fontsource/courgette";
+import "@fontsource/marck-script";
 import Papa from "papaparse";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
@@ -34,6 +61,9 @@ import {
   FileSpreadsheet,
   Download,
   ChevronLeft,
+  Maximize,
+  Check,
+  AlertCircle,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -60,6 +90,8 @@ type TextField = {
   autoFit: boolean;
 };
 
+const TEMPLATE_CATEGORIES = ["Custom", "Participation", "Achievement", "Workshop", "Appreciation"];
+
 const FONT_OPTIONS = [
   "Inter",
   "Great Vibes",
@@ -71,6 +103,22 @@ const FONT_OPTIONS = [
   "Raleway",
   "Lora",
   "Oswald",
+  "Cinzel",
+  "Cormorant Garamond",
+  "Merriweather",
+  "Josefin Sans",
+  "Bebas Neue",
+  "Abril Fatface",
+  "Lobster",
+  "Allura",
+  "Alex Brush",
+  "Sacramento",
+  "Parisienne",
+  "Satisfy",
+  "Tangerine",
+  "Kaushan Script",
+  "Courgette",
+  "Marck Script",
 ];
 
 function createField(label = "{{name}}"): TextField {
@@ -191,19 +239,16 @@ function QRNode({ field, scale, isExporting, onSelect, onUpdate }: {
       />
       {!isExporting && (
         <Text
-          text="PREVIEW ONLY"
-          x={field.x * scale}
-          y={(field.y * scale) + (field.fontSize * scale) / 2 - 5}
-          width={field.width * scale}
-          fontSize={Math.max(8, (field.width * scale) / 8)}
-          fontFamily="Inter"
-          fontStyle="black"
-          fill="white"
+          text="Sample QR — unique per certificate"
+          x={field.x * scale - 60}
+          y={(field.y + field.fontSize) * scale + 6}
+          width={field.width * scale + 120}
+          fontSize={10}
+          fontFamily="Inter, sans-serif"
+          fill="#94a3b8"
           align="center"
+          wrap="none"
           listening={false}
-          opacity={0.8}
-          shadowColor="black"
-          shadowBlur={10}
         />
       )}
     </>
@@ -224,7 +269,55 @@ export default function CertificateEditor() {
   const [backgroundImage] = useImage(backgroundSrc || "");
   const [fields, setFields] = useState<TextField[]>([createField()]);
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
-  const [templateName, setTemplateName] = useState("Untitled Template");
+  const [templateName, setTemplateName] = useState("Untitled template");
+  const [category, setCategory] = useState("Custom");
+  const [loadedFonts, setLoadedFonts] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const notify = useCallback((tone: "ok" | "error", text: string) => {
+    setNotice({ tone, text });
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3500);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // Canvas text falls back to a default face until the web font has loaded, so load
+  // every offered font up front and re-measure text nodes once each one is ready.
+  useEffect(() => {
+    let cancelled = false;
+    FONT_OPTIONS.forEach((family) => {
+      document.fonts
+        .load(`16px "${family}"`)
+        .then(() => {
+          if (!cancelled) setLoadedFonts((prev) => (prev.has(family) ? prev : new Set(prev).add(family)));
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Scale that fits an image of the given size inside the visible workspace. */
+  const fitScale = useCallback((width: number, height: number) => {
+    const workspace = workspaceRef.current;
+    if (!workspace || !width || !height) return 1;
+    const availW = Math.max(200, workspace.clientWidth - 96);
+    const availH = Math.max(200, workspace.clientHeight - 96);
+    return Math.min(1, availW / width, availH / height);
+  }, []);
+
+  const fitToScreen = useCallback(() => {
+    setCanvasMeta((prev) => {
+      if (prev.originalWidth <= 1) return prev;
+      const scale = fitScale(prev.originalWidth, prev.originalHeight);
+      return { ...prev, scale, scaledWidth: prev.originalWidth * scale, scaledHeight: prev.originalHeight * scale };
+    });
+  }, [fitScale]);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [activeTab, setActiveTab] = useState<"design" | "layers" | "data">("design");
@@ -251,8 +344,18 @@ export default function CertificateEditor() {
             setTemplateName(data.name);
             setBackgroundSrc(data.imagePath);
             setFields(data.fields as TextField[]);
+            if (data.category) setCategory(data.category);
             if (data.canvasMeta) {
-              setCanvasMeta(data.canvasMeta);
+              // Saved zoom came from another screen size — refit to this one.
+              const { originalWidth, originalHeight } = data.canvasMeta;
+              const scale = fitScale(originalWidth, originalHeight);
+              setCanvasMeta({
+                originalWidth,
+                originalHeight,
+                scale,
+                scaledWidth: originalWidth * scale,
+                scaledHeight: originalHeight * scale,
+              });
             }
           }
         } catch (err) {
@@ -261,7 +364,7 @@ export default function CertificateEditor() {
       };
       loadTemplate();
     }
-  }, [templateIdFromUrl]);
+  }, [templateIdFromUrl, fitScale]);
 
   const selectedField = useMemo(() => {
     return fields.find((f) => f.id === selectedFieldId);
@@ -269,31 +372,30 @@ export default function CertificateEditor() {
 
   const handleTemplateUpload = (e: any) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
+    if (!file) return;
+    // Read as a data URL so the background is stored with the template.
+    // (A temporary blob: URL stops working as soon as the page is closed.)
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result as string;
       const img = new Image();
       img.onload = () => {
-        const aspect = img.width / img.height;
-        const workspace = workspaceRef.current;
-        if (workspace) {
-          const wWidth = workspace.clientWidth - 40;
-          const wHeight = workspace.clientHeight - 40;
-          let scale = 1;
-          if (img.width > wWidth || img.height > wHeight) {
-            scale = Math.min(wWidth / img.width, wHeight / img.height);
-          }
-          setCanvasMeta({
-            originalWidth: img.width,
-            originalHeight: img.height,
-            scaledWidth: img.width * scale,
-            scaledHeight: img.height * scale,
-            scale,
-          });
-        }
+        const scale = fitScale(img.width, img.height);
+        setCanvasMeta({
+          originalWidth: img.width,
+          originalHeight: img.height,
+          scaledWidth: img.width * scale,
+          scaledHeight: img.height * scale,
+          scale,
+        });
         setBackgroundSrc(url);
       };
+      img.onerror = () => notify("error", "That file could not be read as an image.");
       img.src = url;
-    }
+    };
+    reader.onerror = () => notify("error", "That file could not be read.");
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const handleDataUpload = (e: any) => {
@@ -379,14 +481,19 @@ export default function CertificateEditor() {
   };
 
   const handleSaveTemplate = async (isSaveAs = false) => {
+    if (!backgroundSrc) {
+      notify("error", "Upload a certificate background before saving.");
+      return;
+    }
     const payload = {
       name: isSaveAs ? `${templateName} (Copy)` : templateName,
       imagePath: backgroundSrc,
       fields,
       canvasMeta,
-      category: "Custom",
+      category,
     };
 
+    setIsSaving(true);
     try {
       if (currentTemplateId && !isSaveAs) {
         const res = await fetch(`/api/templates/${currentTemplateId}`, {
@@ -394,7 +501,7 @@ export default function CertificateEditor() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (res.ok) alert("Registry updated.");
+        notify(res.ok ? "ok" : "error", res.ok ? "Template saved." : "Could not save the template.");
       } else {
         const res = await fetch("/api/templates", {
           method: "POST",
@@ -404,11 +511,16 @@ export default function CertificateEditor() {
         const data = await res.json();
         if (res.ok) {
           setCurrentTemplateId(data.id);
-          alert("New design saved.");
+          if (isSaveAs) setTemplateName(payload.name);
+          notify("ok", isSaveAs ? "Saved as a new template." : "Template saved.");
+        } else {
+          notify("error", "Could not save the template.");
         }
       }
     } catch (err) {
-      alert("Persistence operation failed.");
+      notify("error", "Could not save the template. Check your connection.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -464,7 +576,7 @@ export default function CertificateEditor() {
       initializedBatch = await res.json();
     } catch (err) {
       console.error("Batch initialization failed", err);
-      alert("System failed to initialize batch records. Aborting export.");
+      notify("error", "Could not start the export. Please try again.");
       setIsExporting(false);
       return;
     }
@@ -598,7 +710,7 @@ export default function CertificateEditor() {
       initializedBatch = await res.json();
     } catch (err) {
       console.error("Batch initialization failed", err);
-      alert("System failed to initialize batch records. Aborting export.");
+      notify("error", "Could not start the export. Please try again.");
       setIsExporting(false);
       return;
     }
@@ -701,7 +813,7 @@ export default function CertificateEditor() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-background font-sans antialiased text-foreground transition-colors duration-300">
       {/* Sidebar - Tools Switcher (80px) */}
-      <aside className="w-20 shrink-0 h-full border-r border-border bg-card flex flex-col items-center py-6 gap-6 z-20">
+      <aside className="w-16 shrink-0 h-full border-r border-border bg-card flex flex-col items-center py-4 gap-3 z-20">
         <button
           onClick={() => setActiveTab("design")}
           className={`p-3 rounded-xl transition-all duration-200 ${activeTab === "design" 
@@ -725,19 +837,18 @@ export default function CertificateEditor() {
           className={`p-3 rounded-xl transition-all duration-200 ${activeTab === "data" 
             ? "bg-violet-600 text-white shadow-md shadow-violet-500/20" 
             : "text-muted-foreground hover:bg-muted"}`}
-          title="Data"
+          title="Recipients"
         >
           <FileSpreadsheet className="h-6 w-6" />
         </button>
       </aside>
 
       {/* Control Panel (360px) */}
-      <aside className="w-[360px] shrink-0 h-full border-r border-border bg-card flex flex-col shadow-xl shadow-black/5 z-10">
+      <aside className="w-[300px] xl:w-[340px] shrink-0 h-full border-r border-border bg-card flex flex-col shadow-xl shadow-black/5 z-10">
         <div className="px-6 py-6 border-b border-border flex items-center justify-between">
           <h2 className="text-sm font-bold text-foreground uppercase tracking-widest leading-none">
-            {activeTab} Settings
+            {activeTab === "design" ? "Design" : activeTab === "layers" ? "Layers" : "Recipients"}
           </h2>
-          <span className="text-[10px] font-black text-muted-foreground bg-muted px-2 py-0.5 rounded uppercase tracking-tighter">v2.5</span>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
@@ -748,26 +859,38 @@ export default function CertificateEditor() {
                 <label className="flex flex-col items-center justify-center border border-dashed border-border hover:border-violet-500/50 rounded-xl p-6 bg-muted/20 hover:bg-muted transition-all cursor-pointer group">
                   <Upload className="h-6 w-6 text-muted-foreground/30 group-hover:text-violet-600 mb-2 transition-colors" />
                   <span className="text-xs font-bold text-muted-foreground group-hover:text-foreground">
-                    {backgroundSrc ? 'Change Image' : 'Upload Template'}
+                    {backgroundSrc ? 'Replace background' : 'Upload certificate image'}
                   </span>
                   <input type="file" accept="image/*" onChange={handleTemplateUpload} className="hidden" />
                 </label>
               </div>
 
+              <div className="space-y-2">
+                <label htmlFor="template-category" className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Category</label>
+                <select
+                  id="template-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-card px-2 py-2 text-xs text-foreground focus:ring-1 focus:ring-violet-500/30 font-bold outline-none cursor-pointer"
+                >
+                  {TEMPLATE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
               <div className="space-y-4">
-                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Tools</label>
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Fields</label>
                 <div className="grid grid-cols-1 gap-2">
                   <button
                     onClick={addField}
                     className="flex items-center justify-center gap-2 rounded-xl bg-foreground text-background py-3 font-bold text-xs shadow-sm hover:opacity-90 active:scale-95 transition-all"
                   >
-                    <Plus className="h-4 w-4" /> Add Text Layer
+                    <Plus className="h-4 w-4" /> Add text field
                   </button>
                   <button
                     onClick={addQRField}
                     className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card hover:bg-muted py-3 font-bold text-xs shadow-sm active:scale-95 transition-all"
                   >
-                    <QrCode className="h-4 w-4 text-violet-600" /> Add Verification QR
+                    <QrCode className="h-4 w-4 text-violet-600" /> Add verification QR
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -824,7 +947,7 @@ export default function CertificateEditor() {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Typography</label>
+                          <label className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Font</label>
                           <select
                             value={selectedField.fontFamily}
                             onChange={(e) => updateField(selectedField.id, { fontFamily: e.target.value })}
@@ -901,10 +1024,10 @@ export default function CertificateEditor() {
 
           {activeTab === "layers" && (
             <div className="space-y-4">
-              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Design Stack</label>
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Layers</label>
               {fields.length === 0 ? (
                 <div className="py-20 text-center border border-dashed border-border rounded-2xl">
-                  <p className="text-[10px] text-muted-foreground font-bold uppercase">No Active Layers</p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase">No layers yet</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -934,11 +1057,11 @@ export default function CertificateEditor() {
           {activeTab === "data" && (
             <div className="space-y-8">
               <div className="space-y-4">
-                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">External Source</label>
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Recipient list</label>
                 <label className="flex flex-col items-center justify-center border border-dashed border-border hover:border-emerald-500 rounded-2xl p-6 bg-muted/10 hover:bg-emerald-500/5 cursor-pointer transition-all group">
                   <FileSpreadsheet className={`h-6 w-6 mb-2 ${rows.length > 0 ? "text-emerald-600" : "text-muted-foreground/30"} group-hover:text-emerald-500 transition-colors`} />
                   <span className="text-xs font-bold text-muted-foreground group-hover:text-foreground text-center px-4 leading-relaxed">
-                    {rows.length > 0 ? `${rows.length} Rows Available` : 'Import CSV or TXT Registry'}
+                    {rows.length > 0 ? `${rows.length} recipients loaded — click to replace` : 'Import a CSV, or a TXT with one name per line'}
                   </span>
                   <input type="file" accept=".csv,.txt" onChange={handleDataUpload} className="hidden" />
                 </label>
@@ -947,8 +1070,8 @@ export default function CertificateEditor() {
               {rows.length > 0 && (
                 <div className="space-y-4 pt-6 border-t border-border animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <div className="flex items-center justify-between px-1">
-                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Global Pointers</label>
-                    <button onClick={() => setRows([])} className="text-[9px] font-black text-rose-500 hover:underline uppercase">Purge</button>
+                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Available placeholders</label>
+                    <button onClick={() => setRows([])} className="text-[9px] font-black text-rose-500 hover:underline uppercase">Clear list</button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {Object.keys(rows[0]).map(h => (
@@ -957,7 +1080,17 @@ export default function CertificateEditor() {
                       </span>
                     ))}
                   </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Type a placeholder into any text field. It is replaced with each recipient&apos;s value on export.
+                  </p>
                 </div>
+              )}
+
+              {rows.length === 0 && (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Column headers become placeholders — a <code className="font-mono text-violet-600">name</code> column fills every{" "}
+                  <code className="font-mono text-violet-600">{"{{name}}"}</code> field. One certificate is generated per row.
+                </p>
               )}
             </div>
           )}
@@ -966,7 +1099,7 @@ export default function CertificateEditor() {
 
       {/* Workspace Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <header className="h-14 border-b border-border bg-card/80 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-20">
+        <header className="h-14 border-b border-border bg-card/80 backdrop-blur-xl flex items-center justify-between gap-4 px-4 shrink-0 z-20 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/dashboard")}
@@ -979,11 +1112,11 @@ export default function CertificateEditor() {
               <input 
                 value={templateName}
                 onChange={(e) => setTemplateName(e.target.value)}
-                className="bg-transparent text-sm font-bold text-foreground tracking-tight outline-none focus:ring-1 focus:ring-violet-500/20 rounded px-1 min-w-[180px]"
-                placeholder="Design Entity Name"
+                className="bg-transparent text-sm font-bold text-foreground tracking-tight outline-none focus:ring-1 focus:ring-violet-500/20 rounded px-1 w-[150px] xl:w-[220px] truncate"
+                placeholder="Template name" aria-label="Template name"
               />
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Resolution:</span>
+              <div className="hidden 2xl:flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Size:</span>
                 <span className="text-[9px] font-black text-violet-600 uppercase tracking-widest">
                   {backgroundImage ? `${backgroundImage.width}×${backgroundImage.height}` : "0×0"}
                 </span>
@@ -996,15 +1129,15 @@ export default function CertificateEditor() {
             <div className="flex items-center gap-1.5 bg-muted/40 border border-border p-1 rounded-xl">
               <button 
                 onClick={() => handleSaveTemplate(false)}
-                className="px-3 py-1.5 rounded-lg bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest transition shadow-sm active:scale-95"
+                className="px-3 py-1.5 rounded-lg bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition shadow-sm active:scale-95"
               >
-                {currentTemplateId ? "Update" : "Save"}
+                {isSaving ? "Saving…" : "Save"}
               </button>
               <button 
                 onClick={() => handleSaveTemplate(true)}
-                className="px-3 py-1.5 rounded-lg bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest transition shadow-sm active:scale-95"
+                className="px-3 py-1.5 rounded-lg bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition shadow-sm active:scale-95"
               >
-                Save As
+                Save as copy
               </button>
             </div>
 
@@ -1015,14 +1148,14 @@ export default function CertificateEditor() {
               <button 
                 onClick={handleExportPNG}
                 disabled={isExporting}
-                className="px-4 py-2 rounded-xl bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest transition shadow-sm active:scale-95 disabled:opacity-30"
+                className="px-4 py-2 rounded-xl bg-card border border-border hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition shadow-sm active:scale-95 disabled:opacity-30"
               >
                 Export PNG
               </button>
               <button 
                 onClick={handleExportPDF}
                 disabled={isExporting}
-                className="px-4 py-2 rounded-xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest shadow-lg hover:opacity-90 transition active:scale-95 disabled:opacity-30"
+                className="px-4 py-2 rounded-xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest whitespace-nowrap shadow-lg hover:opacity-90 transition active:scale-95 disabled:opacity-30"
               >
                 {isExporting && !rows.length ? "..." : "Export PDF"}
               </button>
@@ -1036,16 +1169,16 @@ export default function CertificateEditor() {
                   <button 
                     onClick={handleExportPNG}
                     disabled={isExporting}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition shadow-sm active:scale-95 disabled:opacity-30"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest whitespace-nowrap hover:bg-emerald-700 transition shadow-sm active:scale-95 disabled:opacity-30"
                   >
-                    {isExporting ? `${exportProgress}%` : "Bulk PNG ZIP"}
+                    {isExporting ? `${exportProgress}%` : `Export ${rows.length} as PNG`}
                   </button>
                   <button 
                     onClick={handleExportBulkPDF}
                     disabled={isExporting}
-                    className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition shadow-sm active:scale-95 disabled:opacity-30"
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest whitespace-nowrap hover:opacity-90 transition shadow-sm active:scale-95 disabled:opacity-30"
                   >
-                    {isExporting ? `${exportProgress}%` : "Bulk PDF ZIP"}
+                    {isExporting ? `${exportProgress}%` : `Export ${rows.length} as PDF`}
                   </button>
                 </div>
               </>
@@ -1076,9 +1209,31 @@ export default function CertificateEditor() {
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
+              <button
+                onClick={fitToScreen}
+                title="Fit to screen"
+                aria-label="Fit to screen"
+                className="p-1 hover:bg-card rounded-lg text-muted-foreground hover:text-foreground transition-all"
+              >
+                <Maximize className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </header>
+
+        {notice && (
+          <div
+            role="status"
+            className={`absolute left-1/2 top-[68px] z-30 -translate-x-1/2 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold shadow-xl animate-in fade-in slide-in-from-top-2 duration-200 ${
+              notice.tone === "ok"
+                ? "border-emerald-500/30 bg-card text-emerald-600 dark:text-emerald-400"
+                : "border-rose-500/30 bg-card text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            {notice.tone === "ok" ? <Check className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+            {notice.text}
+          </div>
+        )}
 
         <div
           ref={workspaceRef}
@@ -1088,18 +1243,18 @@ export default function CertificateEditor() {
             backgroundSize: "32px 32px",
           }}
         >
-          <div className="min-h-full min-w-full inline-flex items-center justify-center p-20">
+          <div className="min-h-full min-w-full inline-flex items-center justify-center p-12">
             {!backgroundImage ? (
               <div className="flex flex-col items-center justify-center text-center max-w-xs p-10 rounded-3xl border border-border bg-card shadow-2xl animate-in zoom-in-95 duration-500">
                 <div className="p-5 bg-violet-500/10 text-violet-600 rounded-2xl mb-6">
                   <Upload className="h-8 w-8" />
                 </div>
-                <h2 className="text-xl font-bold text-foreground tracking-tight">Studio Empty</h2>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Start with your certificate</h2>
                 <p className="mt-2 text-xs text-muted-foreground font-medium leading-relaxed">
-                  Initialize your workspace by uploading a high-resolution certificate template.
+                  Upload the certificate design as an image (PNG or JPG). You will place the name and other fields on top of it.
                 </p>
                 <label className="mt-8 block w-full px-6 py-3 text-[10px] font-black uppercase tracking-widest text-background bg-foreground hover:scale-105 rounded-xl cursor-pointer transition-all active:scale-95 text-center">
-                  Select Base Image
+                  Choose image
                   <input type="file" accept="image/*" onChange={handleTemplateUpload} className="hidden" />
                 </label>
               </div>
@@ -1131,7 +1286,7 @@ export default function CertificateEditor() {
                         />
                       ) : (
                         <Text
-                          key={field.id}
+                          key={`${field.id}:${loadedFonts.has(field.fontFamily) ? "ready" : "loading"}`}
                           id={field.id}
                           text={field.label}
                           x={field.x * canvasMeta.scale}

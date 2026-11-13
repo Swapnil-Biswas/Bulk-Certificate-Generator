@@ -1,11 +1,5 @@
 import type { Metadata } from "next";
-import {
-  Inter,
-  Great_Vibes,
-  Pacifico,
-  Dancing_Script,
-  Playfair_Display,
-} from "next/font/google";
+import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 import SessionProvider from "@/components/session-provider";
@@ -13,29 +7,40 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
 });
 
-const greatVibes = Great_Vibes({
+const instrumentSerif = Instrument_Serif({
   weight: "400",
+  style: ["normal", "italic"],
   subsets: ["latin"],
+  variable: "--font-instrument",
+  display: "swap",
 });
 
-const pacifico = Pacifico({
-  weight: "400",
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-});
-
-const dancingScript = Dancing_Script({
-  subsets: ["latin"],
-});
-
-const playfair = Playfair_Display({
-  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "CertGen",
-  description: "Bulk certificate generator",
+  metadataBase: new URL("https://www.certificategenerator.space"),
+  title: {
+    default: "CertGen — Design, bulk-generate and verify certificates",
+    template: "%s · CertGen",
+  },
+  description:
+    "Design a certificate once, generate one for everyone on your list, and give each a QR code anyone can verify. PNG and PDF export, built for events, courses and teams.",
+  openGraph: {
+    title: "CertGen — Design, bulk-generate and verify certificates",
+    description:
+      "Design a certificate once, generate one for everyone on your list, and give each a QR code anyone can verify.",
+    url: "https://www.certificategenerator.space",
+    siteName: "CertGen",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -44,20 +49,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`
-          ${inter.className}
-          ${greatVibes.className}
-          ${pacifico.className}
-          ${dancingScript.className}
-          ${playfair.className}
-        `}
-      >
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="font-sans">
         <SessionProvider>
-          <ThemeProvider>
-            {children}
-          </ThemeProvider>
+          <ThemeProvider>{children}</ThemeProvider>
         </SessionProvider>
       </body>
     </html>

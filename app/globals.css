@@ -11,9 +11,13 @@
   --color-ring: var(--ring);
 }
 
-html {
-  scroll-behavior: smooth;
+/* Fonts come from next/font variables set on <html>; `inline` makes utilities reference them directly. */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 }
+
 
 :root {
   --background: #ffffff;
@@ -54,8 +58,13 @@ body {
   min-height: 100vh;
 }
 
-* {
-  border-color: var(--border);
+/* Default border colour lives in the base layer so border-* utilities can override it. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -81,4 +90,132 @@ body {
     rgba(124, 58, 237, 0.1),
     transparent 40%
   );
+}
+
+/* ───────────────────────── Marketing site ───────────────────────── */
+
+.mk {
+  --mk-bg: #07070b;
+  --mk-surface: rgba(255, 255, 255, 0.035);
+  --mk-line: rgba(255, 255, 255, 0.08);
+  --mk-text: #f4f3f8;
+  --mk-muted: #a09fb1;
+  --mk-dim: #6f6e80;
+  --mk-accent: #8b6cff;
+  --mk-accent-soft: #b9a6ff;
+  background: var(--mk-bg);
+  color: var(--mk-text);
+  color-scheme: dark;
+}
+
+/* The smooth-scroll wrapper is taken out of flow, so paint the page colour on the body too. */
+:root:has(.mk) body,
+.mk #smooth-content {
+  background: #07070b;
+}
+
+.mk ::selection {
+  background: rgba(139, 108, 255, 0.35);
+  color: #fff;
+}
+
+.mk-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+}
+
+.mk-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+@keyframes mk-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6%, 8%, 0) scale(1.12); }
+}
+@keyframes mk-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+  50% { transform: translate3d(-8%, -5%, 0) scale(0.95); }
+}
+.mk-aurora-a { animation: mk-drift-a 18s ease-in-out infinite; }
+.mk-aurora-b { animation: mk-drift-b 22s ease-in-out infinite; }
+
+@keyframes mk-marquee {
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.mk-marquee-track {
+  animation: mk-marquee 38s linear infinite;
+  will-change: transform;
+}
+
+@keyframes mk-scan {
+  0% { transform: translateY(-10%); opacity: 0; }
+  12%, 88% { opacity: 1; }
+  100% { transform: translateY(1010%); opacity: 0; }
+}
+.mk-scan { animation: mk-scan 3.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+
+@keyframes mk-caret {
+  50% { opacity: 0; }
+}
+.mk-caret { animation: mk-caret 1s steps(1) infinite; }
+
+/* Hero elements wait for their entrance animation only when scripting and motion are available
+   (the class is set by an inline script); a delayed fallback reveals them if scripts never run. */
+@keyframes mk-failsafe { to { visibility: visible; } }
+.mk-js [data-hero] {
+  visibility: hidden;
+  animation: mk-failsafe 0s linear 4s forwards;
+}
+
+/* Cards that light up under the pointer (JS sets --mx / --my). */
+.mk-spot {
+  position: relative;
+  isolation: isolate;
+}
+.mk-spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, -40%), rgba(139, 108, 255, 0.16), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+.mk-spot:hover::before { opacity: 1; }
+
+/* Certificate preview: text scales with the card, like the real canvas. */
+.mk-cert { container-type: inline-size; }
+
+/* How-it-works: stacked and fully visible by default; JS switches to the pinned, cross-fading stage. */
+.mk-how[data-pinned="true"] .mk-how-step[data-active="false"] { opacity: 0.38; }
+.mk-how[data-pinned="true"] .mk-how-step[data-active="false"] .mk-how-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.mk-how-step { transition: opacity 0.4s ease; }
+.mk-how-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+}
+.mk-how-body > * { overflow: hidden; }
+
+.mk-faq-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mk-faq-body[data-open="true"] { grid-template-rows: 1fr; }
+.mk-faq-body > * { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-aurora-a, .mk-aurora-b, .mk-marquee-track, .mk-scan, .mk-caret { animation: none; }
+  .mk-how-step, .mk-how-body, .mk-faq-body { transition: none; }
 }
