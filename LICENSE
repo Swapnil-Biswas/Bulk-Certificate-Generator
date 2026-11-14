@@ -1,0 +1,40 @@
+CertGen — Proprietary License
+
+Copyright (c) 2026 Swapnil Biswas. All rights reserved.
+
+1. Ownership
+   This software, including its source code, design, documentation, logo and
+   other assets (the "Software"), is the property of the copyright holder and
+   is protected by copyright law.
+
+2. Permitted use
+   The source code is made publicly visible so that it can be viewed and
+   evaluated. You may read the Software and run it locally for personal
+   evaluation only.
+
+3. Restrictions
+   Without prior written permission from the copyright holder, you may not:
+   a. copy, modify, merge or create derivative works of the Software;
+   b. publish, distribute, sublicense, sell or lease the Software or any part
+      of it;
+   c. host the Software, or a modified version of it, as a service for others;
+   d. remove or alter any copyright, license or attribution notice;
+   e. use the "CertGen" name or logo to identify another product or service.
+
+4. Exceptions
+   a. contracts/CertGenRegistry.sol is licensed separately under the MIT
+      License, as stated by the SPDX identifier in that file.
+   b. Third-party software used by the Software remains under its own license
+      terms. See THIRD_PARTY_NOTICES.md.
+
+5. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+   OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+6. Permissions
+   For permission to use the Software beyond these terms, contact the
+   copyright holder through https://www.certificategenerator.space/contact
