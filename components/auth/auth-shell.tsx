@@ -20,6 +20,7 @@ export function AuthShell({
         <div className="mk-grid-bg absolute inset-0" />
         <div className="mk-aurora-a absolute -top-48 left-1/2 h-[560px] w-[820px] -translate-x-[65%] rounded-full bg-violet-600/20 blur-[140px]" />
         <div className="mk-aurora-b absolute -top-32 left-1/2 h-[460px] w-[640px] translate-x-[5%] rounded-full bg-sky-500/10 blur-[140px]" />
+        <div className="mk-aurora-c absolute top-48 left-1/2 h-[380px] w-[560px] translate-x-[15%] rounded-full bg-emerald-500/10 blur-[140px]" />
       </div>
 
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">

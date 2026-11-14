@@ -526,6 +526,7 @@ export default function LandingPage() {
                 <div className="mk-grid-bg absolute inset-0" />
                 <div className="mk-aurora-a absolute -top-40 left-1/2 h-[620px] w-[900px] -translate-x-[70%] rounded-full bg-violet-600/25 blur-[140px]" />
                 <div className="mk-aurora-b absolute -top-24 left-1/2 h-[520px] w-[720px] translate-x-[5%] rounded-full bg-sky-500/15 blur-[140px]" />
+                <div className="mk-aurora-c absolute top-40 left-1/2 h-[420px] w-[620px] translate-x-[10%] rounded-full bg-emerald-500/15 blur-[140px]" />
                 <div className="mk-noise absolute inset-0" />
               </div>
 
@@ -573,7 +574,7 @@ export default function LandingPage() {
 
               {/* Product shot */}
               <div data-hero className="hero-stage relative mx-auto mt-16 max-w-6xl sm:mt-20" style={{ perspective: "1800px" }}>
-                <div aria-hidden className="absolute -inset-x-10 -top-10 bottom-1/3 rounded-[50%] bg-violet-600/30 blur-[120px]" />
+                <div aria-hidden className="mk-breathe absolute -inset-x-10 -top-10 bottom-1/3 rounded-[50%] bg-violet-600/30 blur-[120px]" />
                 <div className="hero-shot relative origin-top will-change-transform" style={{ transformStyle: "preserve-3d" }}>
                   <BrowserFrame label="certificategenerator.space/dashboard/certificates">
                     <Image
@@ -928,7 +929,7 @@ export default function LandingPage() {
 
             {/* ───────────── Verification ───────────── */}
             <section id="verify" className="relative scroll-mt-24 px-6 py-24 sm:py-32">
-              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1/4 mx-auto h-[420px] max-w-4xl rounded-full bg-emerald-500/10 blur-[140px]" />
+              <div aria-hidden className="mk-aurora-b pointer-events-none absolute inset-x-0 top-1/4 mx-auto h-[420px] max-w-4xl rounded-full bg-emerald-500/15 blur-[140px]" />
               <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 lg:grid-cols-2">
                 <div>
                   <Eyebrow>Verification</Eyebrow>
@@ -990,7 +991,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="relative mx-auto mt-14 max-w-6xl" style={{ perspective: "1800px" }}>
-                  <div aria-hidden className="absolute inset-x-10 -top-10 bottom-1/2 rounded-[50%] bg-violet-600/20 blur-[120px]" />
+                  <div aria-hidden className="mk-breathe absolute inset-x-10 -top-10 bottom-1/2 rounded-[50%] bg-violet-600/20 blur-[120px]" />
                   <div className="dash-frame relative origin-bottom will-change-transform">
                     <BrowserFrame label="certificategenerator.space/dashboard">
                       <div className="relative">

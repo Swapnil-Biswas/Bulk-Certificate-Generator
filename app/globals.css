@@ -163,16 +163,32 @@ html.theme-fade *::after {
   mix-blend-mode: overlay;
 }
 
+/* Background glows drift slowly so the page feels alive. Only transform and opacity are animated,
+   so the (expensive) blur is painted once and the movement stays on the compositor. */
 @keyframes mk-drift-a {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(6%, 8%, 0) scale(1.12); }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  33% { transform: translate3d(18%, 12%, 0) scale(1.18); opacity: 0.85; }
+  66% { transform: translate3d(-10%, 20%, 0) scale(0.94); opacity: 1; }
 }
 @keyframes mk-drift-b {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
-  50% { transform: translate3d(-8%, -5%, 0) scale(0.95); }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.9; }
+  33% { transform: translate3d(-22%, 10%, 0) scale(1.22); opacity: 1; }
+  66% { transform: translate3d(12%, -8%, 0) scale(0.9); opacity: 0.75; }
 }
-.mk-aurora-a { animation: mk-drift-a 18s ease-in-out infinite; }
-.mk-aurora-b { animation: mk-drift-b 22s ease-in-out infinite; }
+@keyframes mk-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
+  40% { transform: translate3d(-26%, -14%, 0) scale(1.25); opacity: 1; }
+  70% { transform: translate3d(16%, 8%, 0) scale(0.92); opacity: 0.7; }
+}
+/* For glows that sit behind a specific element: stay put, but swell and sway. */
+@keyframes mk-breathe {
+  0%, 100% { transform: translate3d(-4%, 0, 0) scale(1); opacity: 0.7; }
+  50% { transform: translate3d(4%, -3%, 0) scale(1.14); opacity: 1; }
+}
+.mk-aurora-a { animation: mk-drift-a 19s ease-in-out infinite; will-change: transform, opacity; }
+.mk-aurora-b { animation: mk-drift-b 23s ease-in-out infinite; will-change: transform, opacity; }
+.mk-aurora-c { animation: mk-drift-c 27s ease-in-out infinite; will-change: transform, opacity; }
+.mk-breathe { animation: mk-breathe 11s ease-in-out infinite; will-change: transform, opacity; }
 
 @keyframes mk-marquee {
   to { transform: translate3d(-50%, 0, 0); }
@@ -246,6 +262,6 @@ html.theme-fade *::after {
 .mk-faq-body > * { overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mk-aurora-a, .mk-aurora-b, .mk-marquee-track, .mk-scan, .mk-caret { animation: none; }
+  .mk-aurora-a, .mk-aurora-b, .mk-aurora-c, .mk-breathe, .mk-marquee-track, .mk-scan, .mk-caret { animation: none; }
   .mk-how-step, .mk-how-body, .mk-faq-body { transition: none; }
 }

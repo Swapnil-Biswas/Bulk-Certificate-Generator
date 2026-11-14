@@ -67,7 +67,7 @@ export function PageCta({
 }) {
   return (
     <section className="relative mt-24 overflow-hidden rounded-3xl border border-white/[0.08] bg-[var(--mk-surface)] px-7 py-12 text-center sm:py-16">
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-64 w-[640px] max-w-full -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-600/25 blur-[100px]" />
+      <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-64 w-[640px] max-w-full -translate-x-1/2 -translate-y-1/2 mk-breathe rounded-full bg-violet-600/25 blur-[100px]" />
       <h2 className="relative text-balance text-3xl font-semibold tracking-[-0.02em] text-white sm:text-4xl">{title}</h2>
       <p className="relative mx-auto mt-3 max-w-md text-[var(--mk-muted)]">{body}</p>
       <Link

@@ -15,7 +15,7 @@ export function QuantumLayout({
     <div className="mk min-h-screen font-sans antialiased text-slate-200">
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="mk-grid-bg absolute inset-0" />
-        <div className="absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[140px]" />
+        <div className="mk-aurora-a absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[140px]" />
       </div>
 
       <SiteNav />
