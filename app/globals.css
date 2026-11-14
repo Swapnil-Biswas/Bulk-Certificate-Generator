@@ -54,8 +54,38 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
   min-height: 100vh;
+}
+
+/* ── Theme switching (classes are set on <html> by components/theme-provider.tsx) ── */
+
+/* While the theme swaps, per-element transitions are frozen so nothing lags behind the rest. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
+/* The new theme is revealed by a clip-path animation driven from script; the old one sits still beneath it. */
+html.theme-switching::view-transition-old(root),
+html.theme-switching::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.theme-switching::view-transition-old(root) { z-index: 0; }
+html.theme-switching::view-transition-new(root) { z-index: 1; }
+
+/* Browsers without view transitions: everything cross-fades together on one clock. */
+html.theme-fade *,
+html.theme-fade *::before,
+html.theme-fade *::after {
+  transition:
+    background-color 0.28s ease,
+    color 0.28s ease,
+    border-color 0.28s ease,
+    fill 0.28s ease,
+    stroke 0.28s ease,
+    box-shadow 0.28s ease !important;
 }
 
 /* Default border colour lives in the base layer so border-* utilities can override it. */
