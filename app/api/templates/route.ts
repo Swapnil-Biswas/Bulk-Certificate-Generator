@@ -1,45 +1,44 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth/get-session";
+import { getActiveSession } from "@/lib/auth/get-session";
+import { listTemplates, parseTemplateInput } from "@/lib/templates";
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getActiveSession();
+    if (!session) return NextResponse.json({ error: "Please log in again." }, { status: 401 });
 
-    const body = await req.json();
-    const { name, imagePath, category, fields, canvasMeta } = body;
+    const parsed = parseTemplateInput(await req.json().catch(() => null), { partial: false });
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { name, category, imagePath, fields, canvasMeta } = parsed.data;
 
     const template = await prisma.certificateTemplate.create({
       data: {
-        name,
-        imagePath: imagePath || "/placeholder.png",
-        category: category || "Custom",
+        name: name!,
+        category: category!,
+        imagePath: imagePath!,
+        fields: fields as Prisma.InputJsonValue,
+        canvasMeta: canvasMeta as Prisma.InputJsonValue,
         userId: session.user.id,
-        fields,
-        canvasMeta,
       },
+      select: { id: true, name: true, category: true, updatedAt: true },
     });
-
     return NextResponse.json(template);
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("[TEMPLATE_CREATE_ERROR]", error);
+    return NextResponse.json({ error: "The template could not be saved. Please try again." }, { status: 500 });
   }
 }
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const templates = await prisma.certificateTemplate.findMany({
-      where: { userId: session.user.id },
-      orderBy: { updatedAt: "desc" },
-    });
-
-    return NextResponse.json(templates);
+    const session = await getActiveSession();
+    if (!session) return NextResponse.json({ error: "Please log in again." }, { status: 401 });
+    return NextResponse.json(await listTemplates(session.user.id));
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("[TEMPLATE_LIST_ERROR]", error);
+    return NextResponse.json({ error: "Templates could not be loaded." }, { status: 500 });
   }
 }

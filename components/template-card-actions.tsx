@@ -26,16 +26,8 @@ export default function TemplateCardActions({
   const handleDuplicate = async () => {
     setBusy("duplicate");
     try {
-      const res = await fetch(`/api/templates/${templateId}`);
-      if (res.ok) {
-        const template = await res.json();
-        const duplicateRes = await fetch("/api/templates", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...template, name: `${template.name} (Copy)`, id: undefined }),
-        });
-        if (duplicateRes.ok) router.refresh();
-      }
+      const res = await fetch(`/api/templates/${templateId}/duplicate`, { method: "POST" });
+      if (res.ok) router.refresh();
     } finally {
       setBusy(null);
     }

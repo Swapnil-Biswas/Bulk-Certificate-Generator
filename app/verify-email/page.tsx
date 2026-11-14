@@ -1,130 +1,70 @@
-import { prisma } from "@/lib/prisma";
-import { MailCheck, XCircle, ArrowRight, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Logo } from "@/components/logo";
+import { MailCheck, MailX } from "lucide-react";
 
-type VerifyPageProps = {
-  searchParams: Promise<{
-    token?: string;
-  }>;
-};
+import { prisma } from "@/lib/prisma";
+import { AuthShell } from "@/components/auth/auth-shell";
 
-export default async function VerifyEmailPage({
-  searchParams,
-}: VerifyPageProps) {
-  const { token } = await searchParams;
+export const metadata: Metadata = { title: "Confirm your email", robots: { index: false } };
+export const dynamic = "force-dynamic";
 
-  let status: "loading" | "success" | "error" = "loading";
-  let message = "";
-
+async function confirm(token?: string): Promise<{ ok: boolean; title: string; message: string }> {
   if (!token) {
-    status = "error";
-    message = "The verification link appears to be invalid or incomplete.";
-  } else {
-    const verificationToken = await prisma.verificationToken.findUnique({
-      where: { token },
-    });
-
-    if (!verificationToken) {
-      status = "error";
-      message = "This verification token has already been used or is invalid.";
-    } else if (verificationToken.expires < new Date()) {
-      status = "error";
-      message = "This verification link has expired. Please request a new one.";
-    } else {
-      await prisma.user.update({
-        where: { email: verificationToken.identifier },
-        data: { emailVerified: new Date() },
-      });
-
-      await prisma.verificationToken.delete({
-        where: { token },
-      });
-
-      status = "success";
-      message = "Your email has been verified. Access is pending admin approval.";
-    }
+    return { ok: false, title: "This link isn't complete", message: "The confirmation link is missing its code. Open the link from your email again." };
   }
 
+  const record = await prisma.verificationToken.findUnique({ where: { token } });
+  if (!record) {
+    return {
+      ok: false,
+      title: "This link has already been used",
+      message: "If you've confirmed your email before, you're all set — just log in. Otherwise, request a new link from the login page.",
+    };
+  }
+  if (record.expires < new Date()) {
+    return { ok: false, title: "This link has expired", message: "Confirmation links last 24 hours. Log in with your email and password to request a new one." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: record.identifier }, select: { id: true, approvalStatus: true, role: true } });
+  if (!user) {
+    await prisma.verificationToken.deleteMany({ where: { identifier: record.identifier } });
+    return { ok: false, title: "Account not found", message: "The account this link belongs to no longer exists." };
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { emailVerified: new Date() } }),
+    prisma.verificationToken.deleteMany({ where: { identifier: record.identifier } }),
+  ]);
+
+  const approved = user.approvalStatus === "APPROVED" || user.role === "ADMIN";
+  return {
+    ok: true,
+    title: "Email confirmed",
+    message: approved
+      ? "Your account is ready. Log in to get started."
+      : "Thanks! An administrator will review your account next. You'll be able to log in once it's approved.",
+  };
+}
+
+export default async function VerifyEmailPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
+  const { token } = await searchParams;
+  const result = await confirm(token);
+  const Icon = result.ok ? MailCheck : MailX;
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#02040a] p-6 selection:bg-violet-500/30">
-      {/* Background Mesh */}
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,#1e293b_1px,transparent_1px)] [background-size:40px_40px]" />
+    <AuthShell title={result.title} subtitle={result.message}>
+      <div className="space-y-5">
+        <span
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+            result.ok ? "bg-emerald-400/15 text-emerald-300" : "bg-amber-400/15 text-amber-300"
+          }`}
+        >
+          <Icon className="h-6 w-6" />
+        </span>
+        <Link href="/login" className="flex h-11 w-full items-center justify-center rounded-xl bg-white text-[15px] font-semibold text-[#0b0b12] transition hover:bg-violet-100">
+          Go to log in
+        </Link>
       </div>
-
-      <div className="w-full max-w-[500px] relative z-10">
-        {/* Decorative Glows */}
-        <div className="absolute -top-24 -left-24 w-64 h-64 bg-violet-600/20 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/10 rounded-full blur-[100px] animate-pulse" />
-
-        <div className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-950/50 backdrop-blur-2xl shadow-2xl p-8 md:p-12 space-y-10 text-center group">
-          {/* Subtle Shine Effect */}
-          <div className="absolute -top-[100%] left-0 w-full h-full bg-gradient-to-b from-white/5 to-transparent transition-all duration-1000 group-hover:top-0 pointer-events-none" />
-
-          <div className="space-y-4">
-            <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-white/5 border border-white/10 mb-2 shadow-inner group-hover:scale-110 transition-transform duration-500">
-              <Logo iconClassName="h-10 w-10 text-white" />
-            </div>
-            
-            <div className="flex justify-center">
-              {status === "success" ? (
-                <div className="p-3 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 animate-in zoom-in duration-500">
-                  <MailCheck className="h-8 w-8" />
-                </div>
-              ) : (
-                <div className="p-3 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 animate-in zoom-in duration-500">
-                  <XCircle className="h-8 w-8" />
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <h1 className="text-3xl font-black text-white tracking-tight uppercase leading-none">
-                {status === "success" ? "Verified" : "Verification Failed"}
-              </h1>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">
-                {status === "success" ? "Identity confirmed" : "Process interrupted"}
-              </p>
-            </div>
-          </div>
-
-          <p className="text-sm font-bold text-slate-400 leading-relaxed max-w-[280px] mx-auto">
-            {message}
-          </p>
-
-          <Link
-            href="/login"
-            className="inline-flex items-center justify-center w-full relative group/btn overflow-hidden rounded-2xl bg-white py-4 px-4 text-black font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition active:scale-[0.98] gap-3"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-blue-600 opacity-0 group-hover/btn:opacity-10 transition-opacity" />
-            Return to Login
-            <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
-          </Link>
-
-          {/* Bottom Status Bar */}
-          <div className="absolute bottom-0 left-0 w-full h-1 flex">
-            <div className={`flex-1 ${status === 'success' ? 'bg-emerald-600/50' : 'bg-rose-600/50'} animate-pulse`} />
-            <div className="flex-1 bg-violet-600/50 animate-pulse [animation-delay:200ms]" />
-            <div className="flex-1 bg-blue-600/50 animate-pulse [animation-delay:400ms]" />
-          </div>
-        </div>
-
-        <div className="mt-8 flex items-center justify-center gap-6 opacity-40">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-3 w-3 text-emerald-500" />
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Protocol Verified</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3 w-3 text-violet-500" />
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Quantum Secured</span>
-          </div>
-        </div>
-      </div>
-
-      <footer className="fixed bottom-8 text-center space-y-2 pointer-events-none opacity-30">
-        <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.5em]">CertGen Studio © 2026</p>
-      </footer>
-    </div>
+    </AuthShell>
   );
 }

@@ -1,68 +1,59 @@
-"use client";
+import type { Metadata } from "next";
+import Link from "next/link";
 
 import { QuantumLayout } from "@/components/quantum-layout";
-import { motion } from "framer-motion";
-import { FileText, Scale, Zap, ShieldAlert, Ban, CheckCircle } from "lucide-react";
+import { Prose } from "@/components/landing/page-bits";
+
+export const metadata: Metadata = { title: "Terms of Use" };
 
 export default function TermsPage() {
-  const points = [
-    { icon: <CheckCircle className="h-5 w-5" />, title: "Service Access", desc: "Access to the CertGen synthesis engine is provided on a subscription or per-use basis as defined in your service agreement." },
-    { icon: <Zap className="h-5 w-5" />, title: "Acceptable Use", desc: "Users agree to utilize the platform only for legitimate asset synthesis. Any use for fraudulent or illegal purposes is strictly prohibited." },
-    { icon: <Scale className="h-5 w-5" />, title: "Intellectual Property", desc: "You retain all rights to your templates and data. CertGen retains rights to the underlying synthesis engine and platform infrastructure." },
-    { icon: <ShieldAlert className="h-5 w-5" />, title: "Liability", desc: "CertGen is provided 'as-is'. While we maintain high availability, we are not liable for any indirect damages resulting from service interruptions." },
-    { icon: <Ban className="h-5 w-5" />, title: "Termination", desc: "We reserve the right to suspend or terminate access to any node or account that violates these terms or engages in platform abuse." }
-  ];
-
   return (
-    <QuantumLayout 
-      title="TERMS OF USE" 
-      subtitle="LEGAL AGREEMENT"
-    >
-      <div className="max-w-4xl">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mb-20"
-        >
-          <p className="text-xl text-slate-500 font-medium leading-relaxed mb-12">
-            By accessing the CertGen platform, you agree to abide by the following terms and conditions. These terms ensure the integrity of our network and the quality of service for all node operators.
-          </p>
-          <div className="h-px w-full bg-white/5" />
-        </motion.div>
+    <QuantumLayout title="Terms of Use" subtitle="Legal">
+      <Prose>
+        <p className="text-sm text-[var(--mk-dim)]">Last updated: 14 November 2026</p>
+        <p>These terms apply when you use CertGen. By creating an account or using the service, you agree to them.</p>
 
-        <div className="space-y-12">
-          {points.map((p, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="flex gap-8 group"
-            >
-              <div className="shrink-0 h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-violet-500 group-hover:bg-violet-600 group-hover:text-white transition-all duration-500">
-                {p.icon}
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-white uppercase tracking-widest mb-3">{p.title}</h3>
-                <p className="text-slate-500 font-medium leading-relaxed">{p.desc}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+        <h2>Your account</h2>
+        <ul>
+          <li>Provide accurate details and keep your password to yourself. You are responsible for what happens under your account.</li>
+          <li>New accounts are reviewed and may be declined. We may suspend or remove accounts that break these terms.</li>
+        </ul>
 
-        <div className="mt-32 p-12 rounded-[40px] border border-white/5 bg-gradient-to-br from-white/[0.02] to-transparent">
-          <div className="flex items-center gap-4 mb-6">
-            <FileText className="h-6 w-6 text-violet-500" />
-            <h4 className="text-xl font-black text-white uppercase tracking-tighter">Enterprise Service Level Agreement (SLA)</h4>
-          </div>
-          <p className="text-slate-500 font-medium leading-relaxed mb-8">
-            Enterprise customers are eligible for custom SLAs providing guaranteed uptime, dedicated node capacity, and priority engineering support.
-          </p>
-          <button className="px-8 py-4 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-white uppercase tracking-widest hover:bg-white/10 transition-colors">
-            Review Enterprise Terms
-          </button>
-        </div>
-      </div>
+        <h2>Acceptable use</h2>
+        <p>Use CertGen to issue certificates you are genuinely entitled to issue. You must not:</p>
+        <ul>
+          <li>create certificates that impersonate another organisation, or that misrepresent qualifications, awards or identity;</li>
+          <li>upload content you don&apos;t have the right to use, or that is unlawful;</li>
+          <li>include other people&apos;s personal details without a proper reason to do so;</li>
+          <li>attempt to disrupt the service, access other users&apos; data, or get around verification.</li>
+        </ul>
+
+        <h2>Your content</h2>
+        <p>
+          You keep all rights to your designs and data. You give us permission to store and process them only as needed to provide the service — for example saving your templates and showing verification pages.
+        </p>
+
+        <h2>Verification</h2>
+        <p>
+          A verification page confirms that a certificate matches the record created when it was issued through CertGen. It does not confirm who the issuer is or whether the certificate&apos;s statements are true. The issuer is responsible for the content of the certificates they create.
+        </p>
+
+        <h2>Availability</h2>
+        <p>
+          CertGen is provided “as is”, without guarantees of uptime or fitness for a particular purpose. We may change or discontinue features. Keep your own copies of exported certificates and recipient lists.
+        </p>
+
+        <h2>Liability</h2>
+        <p>
+          To the extent the law allows, we are not liable for indirect or consequential losses arising from use of the service, including loss of data or reliance on a certificate.
+        </p>
+
+        <h2>Changes to these terms</h2>
+        <p>We may update these terms. The date above shows the latest version; continuing to use CertGen after a change means you accept it.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about these terms? Use the <Link href="/contact">contact form</Link>.</p>
+      </Prose>
     </QuantumLayout>
   );
 }

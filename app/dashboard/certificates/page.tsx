@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { getSession } from "@/lib/auth/get-session";
-import CertificateEditor from "@/components/certificate-editor";
+import CertificateEditor from "@/components/editor/certificate-editor";
 
 export default async function CertificatesPage() {
   const session = await getSession();

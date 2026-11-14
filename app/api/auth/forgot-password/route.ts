@@ -1,49 +1,38 @@
 import { NextResponse } from "next/server";
+
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/email/send-password-reset-email";
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!email) return NextResponse.json({ error: "Enter your email address." }, { status: 400 });
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
-    if (!user) {
-      // For security, don't reveal if user exists or not
-      return NextResponse.json({ message: "If an account exists, a reset email has been sent." });
-    }
+    // Same answer whether or not the address has an account.
+    const generic = NextResponse.json({ message: "If an account exists, a reset email has been sent." });
+    if (!user) return generic;
 
     const token = crypto.randomUUID();
-    const expires = new Date(Date.now() + 3600000); // 1 hour
+    await prisma.$transaction([
+      prisma.passwordResetToken.deleteMany({ where: { email } }),
+      prisma.passwordResetToken.create({
+        data: { email, token, expires: new Date(Date.now() + 60 * 60 * 1000) },
+      }),
+    ]);
 
-    console.log(`[AUTH] Requesting reset for: ${email}`);
-
-    const resetTokenModel = (prisma as any).passwordResetToken;
-    
-    if (!resetTokenModel) {
-      console.error("[AUTH] PasswordResetToken model not found on Prisma Client. Please run npx prisma generate.");
-      return NextResponse.json({ error: "System configuration error: Missing model" }, { status: 500 });
+    const mail = await sendPasswordResetEmail(email, token);
+    if (!mail.ok) {
+      return NextResponse.json(
+        { error: "We couldn't send the reset email right now. Please try again later." },
+        { status: 502 }
+      );
     }
-
-    await resetTokenModel.create({
-      data: { email, token, expires },
-    });
-    console.log(`[AUTH] Reset token created in DB`);
-
-    const { data, error: emailError } = await sendPasswordResetEmail(email, token);
-    
-    if (emailError) {
-      console.error("[AUTH] Resend error:", emailError);
-      return NextResponse.json({ error: "Email delivery failed" }, { status: 500 });
-    }
-
-    console.log(`[AUTH] Email sent successfully:`, data);
-    return NextResponse.json({ message: "Reset email sent." });
+    return generic;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    console.error("[AUTH] Forgot password error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[FORGOT_PASSWORD_ERROR]", error);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

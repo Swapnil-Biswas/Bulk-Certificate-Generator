@@ -1,81 +1,39 @@
-import { sendVerificationEmail } from "@/lib/email/send-verification-email";
-import { generateVerificationToken } from "@/lib/utils/token";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
+import { issueVerificationEmail } from "@/lib/auth/verification";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
-    const parsed = registerSchema.safeParse(body);
-
+    const parsed = registerSchema.safeParse(await req.json());
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: parsed.error.flatten(),
-        },
-        { status: 400 }
-      );
+      const first = parsed.error.issues[0]?.message || "Please check the details you entered.";
+      return NextResponse.json({ error: first }, { status: 400 });
     }
 
     const { name, email, password } = parsed.data;
 
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-    });
-
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return NextResponse.json(
-        {
-          error: "Email already registered",
-        },
+        { error: "An account with this email already exists. Try logging in instead." },
         { status: 409 }
       );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        approvalStatus: "PENDING",
-      },
-    });
-    
-    const token = generateVerificationToken();
-    
-    await prisma.verificationToken.create({
-      data: {
-        identifier: email,
-        token,
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
+    await prisma.user.create({
+      data: { name: name.trim(), email, passwordHash, approvalStatus: "PENDING" },
     });
 
-    await sendVerificationEmail(email, token);
+    // The account exists either way; tell the client whether the email actually went out.
+    const mail = await issueVerificationEmail(email);
 
-    return NextResponse.json(
-      {
-        message: "Registration successful. Verification email sent.",
-        userId: user.id,
-     },
-      { status: 201 }
-    );
+    return NextResponse.json({ emailSent: mail.ok }, { status: 201 });
   } catch (error) {
-    console.error(error);
-
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-      },
-      { status: 500 }
-    );
+    console.error("[REGISTER_ERROR]", error);
+    return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }

@@ -28,8 +28,3 @@ export function shortDate(date: Date | string): string {
 export function plural(count: number, one: string, many = one + "s"): string {
   return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 }
-
-/** Template backgrounds saved before data-URL storage used temporary blob: URLs that no longer resolve. */
-export function isDisplayableImage(src?: string | null): src is string {
-  return !!src && (src.startsWith("data:image/") || src.startsWith("http") || (src.startsWith("/") && src !== "/placeholder.png"));
-}

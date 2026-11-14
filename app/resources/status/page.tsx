@@ -1,117 +1,72 @@
-"use client";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { CheckCircle2, XCircle } from "lucide-react";
 
+import { prisma } from "@/lib/prisma";
 import { QuantumLayout } from "@/components/quantum-layout";
-import { motion } from "framer-motion";
-import { Activity, Globe, Server, Cpu, Database, CheckCircle2 } from "lucide-react";
+import { Lead } from "@/components/landing/page-bits";
 
-export default function StatusPage() {
-  const systems = [
-    { name: "Global Edge Network", status: "Operational", uptime: "99.99%", latency: "24ms" },
-    { name: "Synthesis Engine (v2.5)", status: "Operational", uptime: "100%", latency: "140ms" },
-    { name: "Polygon Bridge Node", status: "Operational", uptime: "99.95%", latency: "800ms" },
-    { name: "Asset CDN", status: "Operational", uptime: "99.99%", latency: "12ms" },
-    { name: "API Gateway", status: "Operational", uptime: "99.98%", latency: "45ms" },
-    { name: "Database Cluster", status: "Operational", uptime: "99.99%", latency: "5ms" }
-  ];
+export const metadata: Metadata = { title: "Status", description: "Live status of the CertGen service." };
+export const dynamic = "force-dynamic";
 
-  const regions = [
-    { name: "US-EAST-1", load: 42 },
-    { name: "EU-WEST-1", load: 28 },
-    { name: "AP-SOUTH-1", load: 15 },
-    { name: "SA-EAST-1", load: 8 }
+async function checkDatabase(): Promise<{ ok: boolean; ms: number }> {
+  const started = performance.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return { ok: true, ms: Math.round(performance.now() - started) };
+  } catch {
+    return { ok: false, ms: Math.round(performance.now() - started) };
+  }
+}
+
+export default async function StatusPage() {
+  const db = await checkDatabase();
+  const checkedAt = new Date();
+
+  const checks = [
+    { name: "Website", detail: "This page loaded, so the application is serving requests.", ok: true },
+    {
+      name: "Database",
+      detail: db.ok ? `Responding in ${db.ms} ms.` : "Not responding. Sign-in, saving and verification are affected.",
+      ok: db.ok,
+    },
+    {
+      name: "Certificate verification",
+      detail: db.ok ? "Verification pages can look up certificates." : "Unavailable while the database is down.",
+      ok: db.ok,
+    },
   ];
+  const allOk = checks.every((c) => c.ok);
 
   return (
-    <QuantumLayout 
-      title="SYSTEM STATUS" 
-      subtitle="REAL-TIME MONITORING"
-    >
-      <div className="flex flex-col md:flex-row items-center justify-between p-10 rounded-[40px] border border-emerald-500/20 bg-emerald-500/5 mb-16">
-        <div className="flex items-center gap-6 mb-6 md:mb-0">
-          <div className="h-16 w-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-            <Activity className="h-8 w-8 text-emerald-500 animate-pulse" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">All Systems Operational</h2>
-            <p className="text-emerald-500/70 text-sm font-bold uppercase tracking-widest">Verified at 14:32:05 UTC</p>
-          </div>
-        </div>
-        <div className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Global Uptime (30d)</span>
-          <span className="text-2xl font-black text-white">99.998%</span>
-        </div>
-      </div>
+    <QuantumLayout title={allOk ? "All systems operational." : "We're having problems."} subtitle="Status">
+      <Lead>
+        A live check, run when you opened this page at{" "}
+        <time dateTime={checkedAt.toISOString()}>
+          {checkedAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC
+        </time>
+        .
+      </Lead>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        <div className="space-y-6">
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-8">Service Health</h3>
-          {systems.map((sys, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="p-6 rounded-2xl border border-white/5 bg-white/[0.01] flex items-center justify-between"
-            >
-              <div className="flex items-center gap-4">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                <span className="text-sm font-black text-white uppercase tracking-widest">{sys.name}</span>
-              </div>
-              <div className="flex items-center gap-8">
-                <div className="text-right hidden sm:block">
-                  <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest block">Latency</span>
-                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{sys.latency}</span>
-                </div>
-                <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-500 uppercase tracking-widest">
-                  {sys.status}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="space-y-12">
-          <div>
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-8">Network Distribution</h3>
-            <div className="grid grid-cols-2 gap-6">
-              {regions.map((reg, i) => (
-                <div key={i} className="p-8 rounded-3xl border border-white/5 bg-white/[0.02]">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] block mb-4">{reg.name}</span>
-                  <div className="flex items-end gap-3 mb-4">
-                    <span className="text-3xl font-black text-white">{reg.load}%</span>
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Load</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${reg.load}%` }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                      className="h-full bg-violet-600" 
-                    />
-                  </div>
-                </div>
-              ))}
+      <ul className="mt-12 max-w-3xl divide-y divide-white/[0.08] overflow-hidden rounded-3xl border border-white/[0.08] bg-[var(--mk-surface)]">
+        {checks.map((check) => (
+          <li key={check.name} className="flex items-center justify-between gap-6 px-6 py-5">
+            <div>
+              <p className="text-base font-medium text-white">{check.name}</p>
+              <p className="mt-0.5 text-sm text-[var(--mk-muted)]">{check.detail}</p>
             </div>
-          </div>
+            <span className={`inline-flex shrink-0 items-center gap-1.5 text-sm font-medium ${check.ok ? "text-emerald-300" : "text-rose-300"}`}>
+              {check.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+              {check.ok ? "Operational" : "Down"}
+            </span>
+          </li>
+        ))}
+      </ul>
 
-          <div className="p-10 rounded-[32px] border border-white/5 bg-gradient-to-br from-violet-600/5 to-transparent">
-             <div className="flex items-center gap-4 mb-6">
-                <Globe className="h-6 w-6 text-violet-500" />
-                <h4 className="text-xl font-black text-white uppercase tracking-tighter">Live Traffic Monitor</h4>
-             </div>
-             <div className="h-32 flex items-end gap-1 px-2">
-                {[...Array(30)].map((_, i) => (
-                  <motion.div 
-                    key={i}
-                    animate={{ height: [`${Math.random() * 60 + 20}%`, `${Math.random() * 60 + 20}%`] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", delay: i * 0.05 }}
-                    className="flex-1 bg-violet-600/20 rounded-t-sm min-h-[10%]" 
-                  />
-                ))}
-             </div>
-          </div>
-        </div>
-      </div>
+      <p className="mt-6 max-w-3xl text-sm leading-relaxed text-[var(--mk-dim)]">
+        This page reflects the moment it was loaded; refresh to check again. Something not working that isn&apos;t shown here?{" "}
+        <Link href="/contact" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">Let us know</Link>.
+      </p>
     </QuantumLayout>
   );
 }

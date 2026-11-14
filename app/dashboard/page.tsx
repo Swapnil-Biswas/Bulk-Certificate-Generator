@@ -16,18 +16,21 @@ import {
 
 import { getSession } from "@/lib/auth/get-session";
 import { prisma } from "@/lib/prisma";
+import { listTemplates } from "@/lib/templates";
 import { TemplatePreview } from "@/components/template-preview";
 import { plural, relativeDay, relativeDayInline } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
+
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
   const userId = session.user.id;
-  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
+  const monthAgo = daysAgo(30);
 
   const [user, templateCount, batchCount, totals, lastMonth, recentBatches, recentTemplates] =
     await Promise.all([
@@ -54,12 +57,7 @@ export default async function DashboardPage() {
           _count: { select: { certificates: true } },
         },
       }),
-      prisma.certificateTemplate.findMany({
-        where: { userId },
-        orderBy: { updatedAt: "desc" },
-        take: 3,
-        select: { id: true, name: true, category: true, imagePath: true, updatedAt: true },
-      }),
+      listTemplates(userId, { take: 3 }),
     ]);
 
   if (!user) redirect("/login");
@@ -288,7 +286,7 @@ export default async function DashboardPage() {
                     className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-3 hover:border-violet-500/40 transition-colors"
                   >
                     <span className="block h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                      <TemplatePreview src={t.imagePath} name={t.name} />
+                      <TemplatePreview src={t.previewUrl} name={t.name} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-foreground">{t.name}</span>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/auth/get-session";
-import { prisma } from "@/lib/prisma";
+import { listTemplates } from "@/lib/templates";
 import TemplateCardActions from "@/components/template-card-actions";
 import { TemplatePreview } from "@/components/template-preview";
 import { relativeDayInline } from "@/lib/utils/format";
@@ -22,13 +22,9 @@ export default async function TemplatesPage({
   const activeCategory = category || "All";
   const filtered = !!q || activeCategory !== "All";
 
-  const templates = await prisma.certificateTemplate.findMany({
-    where: {
-      userId: session.user.id,
-      ...(q && { name: { contains: q, mode: "insensitive" } }),
-      ...(activeCategory !== "All" && { category: activeCategory }),
-    },
-    orderBy: { updatedAt: "desc" },
+  const templates = await listTemplates(session.user.id, {
+    q,
+    category: activeCategory !== "All" ? activeCategory : undefined,
   });
 
   return (
@@ -97,7 +93,7 @@ export default async function TemplatesPage({
               aria-label={`Open ${template.name} in the editor`}
             >
               <TemplatePreview
-                src={template.imagePath}
+                src={template.previewUrl}
                 name={template.name}
                 className="transition-transform duration-500 group-hover:scale-[1.03]"
               />

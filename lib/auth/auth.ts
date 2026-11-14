@@ -21,7 +21,8 @@ export const authOptions: NextAuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: process.env.NODE_ENV === "production",
-        domain: ".certificategenerator.space"
+        // Shared across www and the apex domain in production; host-only elsewhere so local logins work.
+        ...(process.env.NODE_ENV === "production" && { domain: ".certificategenerator.space" }),
       },
     },
   },
@@ -47,45 +48,21 @@ export const authOptions: NextAuthOptions = {
       },
 
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        const email = credentials.email.trim().toLowerCase();
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        // Same outcome for an unknown address and a wrong password.
+        if (!user || !(await bcrypt.compare(credentials.password, user.passwordHash).catch(() => false))) {
           return null;
         }
 
-        const email = credentials.email.toLowerCase();
-        console.log(`[AUTH] Attempting login for: ${email}`);
+        // Error codes are mapped to friendly messages on the login page.
+        if (!user.emailVerified) throw new Error("EmailNotVerified");
+        if (user.approvalStatus === "PENDING" && user.role !== "ADMIN") throw new Error("PendingApproval");
+        if (user.approvalStatus !== "APPROVED" && user.role !== "ADMIN") throw new Error("AccessDenied");
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email,
-          },
-        });
-
-        if (!user) {
-          console.log(`[AUTH] User not found: ${email}`);
-          return null;
-        }
-
-        if (!user.emailVerified) {
-          console.log(`[AUTH] Email not verified: ${email}`);
-          throw new Error("Please verify your email first.");
-        }
-
-        if (user.approvalStatus !== "APPROVED") {
-          console.log(`[AUTH] Account not approved: ${email} (${user.approvalStatus})`);
-          throw new Error("Your account is not approved.");
-        }
-
-        const validPassword = await bcrypt.compare(
-          credentials.password,
-          user.passwordHash
-        );
-
-        if (!validPassword) {
-          console.log(`[AUTH] Invalid password for: ${email}`);
-          return null;
-        }
-
-        console.log(`[AUTH] Login successful: ${email}`);
         return {
           id: user.id,
           email: user.email,
@@ -102,45 +79,45 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (account?.provider === "google") {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email as string },
+    async signIn({ user, account }) {
+      if (account?.provider !== "google") return true;
+
+      const email = user.email?.toLowerCase();
+      if (!email) return "/login?error=OAuthSignin";
+
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+
+      if (!existingUser) {
+        // First visit with Google: create the account ourselves (our users need fields the
+        // default adapter doesn't set), then send them to wait for approval like everyone else.
+        await prisma.user.create({
+          data: {
+            name: user.name?.trim() || email.split("@")[0],
+            email,
+            emailVerified: new Date(), // Google has already confirmed the address.
+            passwordHash: `google:${crypto.randomUUID()}`, // not a valid hash, so password login can't match
+            approvalStatus: "PENDING",
+          },
         });
+        return "/login?error=PendingApproval&new=1";
+      }
 
-        if (existingUser) {
-          if (existingUser.approvalStatus !== "APPROVED") {
-            throw new Error("Your account is not approved.");
-          }
-          // Auto-verify if they use Google
-          if (!existingUser.emailVerified) {
-            await prisma.user.update({
-              where: { id: existingUser.id },
-              data: { emailVerified: new Date() },
-            });
-          }
-          return true;
-        }
+      if (existingUser.role !== "ADMIN") {
+        if (existingUser.approvalStatus === "PENDING") return "/login?error=PendingApproval";
+        if (existingUser.approvalStatus !== "APPROVED") return "/login?error=AccessDenied";
+      }
 
-        // For new users via Google, PrismaAdapter creates them. 
-        // We'll let it create and then they will be blocked by approvalStatus on next attempt
-        // or we can handle creation here but Adapter is preferred.
-        // Actually, if we return true, Adapter will create the user.
-        // But we need to make sure they are NOT signed in if not approved.
-        // Wait, if they are NEW, they definitely aren't approved yet.
-        // So we should return true to allow creation, but then what?
-        // NextAuth will sign them in for this session.
-        // To prevent this, we might need to check if they were JUST created.
+      if (!existingUser.emailVerified) {
+        await prisma.user.update({ where: { id: existingUser.id }, data: { emailVerified: new Date() } });
       }
       return true;
     },
 
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
         token.approvalStatus = user.approvalStatus;
-        console.log(`[AUTH] JWT callback - initial login: ${user.email}`);
       }
 
       // Re-fetch user from DB to ensure approvalStatus is up to date in token for subsequent requests
@@ -166,11 +143,6 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.approvalStatus = token.approvalStatus;
         
-        if (session.user.approvalStatus !== "APPROVED" && session.user.role !== "ADMIN") {
-          // This doesn't prevent session creation but we can handle it in middleware
-        }
-
-        console.log(`[AUTH] Session callback - user: ${session.user.email}, role: ${session.user.role}`);
       }
 
       return session;

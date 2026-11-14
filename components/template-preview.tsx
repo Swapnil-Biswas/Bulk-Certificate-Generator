@@ -1,5 +1,4 @@
 import { ImageOff } from "lucide-react";
-import { isDisplayableImage } from "@/lib/utils/format";
 
 /** Thumbnail of a template background, with a quiet fallback when the image is missing. */
 export function TemplatePreview({
@@ -11,9 +10,9 @@ export function TemplatePreview({
   name: string;
   className?: string;
 }) {
-  if (isDisplayableImage(src)) {
+  if (src) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- data URLs can't go through next/image
+      // eslint-disable-next-line @next/next/no-img-element -- served by an authenticated API route
       <img src={src} alt={`${name} preview`} loading="lazy" className={`h-full w-full object-cover ${className}`} />
     );
   }

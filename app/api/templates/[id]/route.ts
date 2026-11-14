@@ -1,75 +1,68 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth/get-session";
+import type { Prisma } from "@prisma/client";
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+import { prisma } from "@/lib/prisma";
+import { getActiveSession } from "@/lib/auth/get-session";
+import { parseTemplateInput } from "@/lib/templates";
+
+type Context = { params: Promise<{ id: string }> };
+
+const notFound = () => NextResponse.json({ error: "That template no longer exists." }, { status: 404 });
+const unauthorized = () => NextResponse.json({ error: "Please log in again." }, { status: 401 });
+
+export async function GET(_req: Request, { params }: Context) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getActiveSession();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const template = await prisma.certificateTemplate.findUnique({
-      where: { id, userId: session.user.id },
-    });
-
-    if (!template) return NextResponse.json({ error: "Not Found" }, { status: 404 });
-
-    return NextResponse.json(template);
+    const template = await prisma.certificateTemplate.findFirst({ where: { id, userId: session.user.id } });
+    return template ? NextResponse.json(template) : notFound();
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("[TEMPLATE_GET_ERROR]", error);
+    return NextResponse.json({ error: "The template could not be loaded." }, { status: 500 });
   }
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: Request, { params }: Context) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getActiveSession();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const body = await req.json();
-    const { name, fields, canvasMeta, category, imagePath } = body;
-    // Only persist backgrounds that will still resolve later (never temporary blob: URLs).
-    const storableImage = typeof imagePath === "string" && !imagePath.startsWith("blob:");
+    const parsed = parseTemplateInput(await req.json().catch(() => null), { partial: true });
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { name, category, imagePath, fields, canvasMeta } = parsed.data;
 
-    const template = await prisma.certificateTemplate.update({
+    // updateMany scopes the write to the owner without throwing when nothing matches.
+    const result = await prisma.certificateTemplate.updateMany({
       where: { id, userId: session.user.id },
       data: {
-        ...(name && { name }),
-        ...(fields && { fields }),
-        ...(canvasMeta && { canvasMeta }),
-        ...(category && { category }),
-        ...(storableImage && { imagePath }),
+        ...(name !== undefined && { name }),
+        ...(category !== undefined && { category }),
+        ...(imagePath !== undefined && { imagePath }),
+        ...(fields !== undefined && { fields: fields as Prisma.InputJsonValue }),
+        ...(canvasMeta !== undefined && { canvasMeta: canvasMeta as Prisma.InputJsonValue }),
+        updatedAt: new Date(),
       },
     });
-
-    return NextResponse.json(template);
+    return result.count ? NextResponse.json({ id }) : notFound();
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("[TEMPLATE_UPDATE_ERROR]", error);
+    return NextResponse.json({ error: "The template could not be saved. Please try again." }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_req: Request, { params }: Context) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getActiveSession();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    await prisma.certificateTemplate.delete({
-      where: { id, userId: session.user.id },
-    });
-
-    return NextResponse.json({ success: true });
+    const result = await prisma.certificateTemplate.deleteMany({ where: { id, userId: session.user.id } });
+    return result.count ? NextResponse.json({ success: true }) : notFound();
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error("[TEMPLATE_DELETE_ERROR]", error);
+    return NextResponse.json({ error: "The template could not be deleted." }, { status: 500 });
   }
 }

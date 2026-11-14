@@ -1,103 +1,51 @@
-"use client";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Fingerprint, KeyRound, MonitorSmartphone, ShieldCheck, UserCheck, Lock } from "lucide-react";
 
 import { QuantumLayout } from "@/components/quantum-layout";
-import { motion } from "framer-motion";
-import { ShieldCheck, Fingerprint, Lock, Key, Eye, Binary, Zap } from "lucide-react";
+import { CardGrid, Lead, Prose, SectionHeading } from "@/components/landing/page-bits";
+
+export const metadata: Metadata = {
+  title: "Security",
+  description: "How CertGen protects accounts and keeps certificates verifiable.",
+};
 
 export default function SecurityPage() {
-  const features = [
-    {
-      icon: <Fingerprint className="h-6 w-6" />,
-      title: "SHA-256 Integrity",
-      desc: "Every asset is hashed using the SHA-256 algorithm during synthesis, creating a unique cryptographic fingerprint that detects any subsequent tampering."
-    },
-    {
-      icon: <Lock className="h-6 w-6" />,
-      title: "AES-256 Encryption",
-      desc: "Data in transit and at rest is protected using industry-standard AES-256 encryption protocols, ensuring end-to-end privacy."
-    },
-    {
-      icon: <Binary className="h-6 w-6" />,
-      title: "Immutable Registry",
-      desc: "Verification metadata is optionally anchored to decentralized ledgers, providing a permanent and independent audit trail."
-    },
-    {
-      icon: <Key className="h-6 w-6" />,
-      title: "HSM Key Storage",
-      desc: "Sensitive cryptographic keys are stored in Hardware Security Modules (HSM) with strict access controls and audit logging."
-    },
-    {
-      icon: <Eye className="h-6 w-6" />,
-      title: "Audit Protocols",
-      desc: "Continuous monitoring and automated auditing of all synthesis operations ensure strict adherence to security policies."
-    },
-    {
-      icon: <Zap className="h-6 w-6" />,
-      title: "Instant Verification",
-      desc: "Our high-speed verification nodes can validate asset integrity in sub-50ms using decentralized proof-of-authenticity."
-    }
-  ];
-
   return (
-    <QuantumLayout 
-      title="SECURITY" 
-      subtitle="CRYPTOGRAPHIC ARCHITECTURE"
-    >
-      <div className="flex flex-col lg:flex-row gap-20 items-center mb-32">
-        <div className="flex-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-6">
-            <ShieldCheck className="h-3 w-3" />
-            SOC2 Type II Compliant
-          </div>
-          <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-8 leading-none">TAMPER-PROOF <br /> BY DESIGN.</h2>
-          <p className="text-slate-500 text-lg font-medium leading-relaxed">
-            Security is not a feature at CertGen; it is the substrate. Our architecture utilizes advanced cryptographic primitives to ensure that every asset generated is provably authentic and resistant to manipulation.
-          </p>
-        </div>
-        <div className="flex-1 relative">
-           <div className="absolute inset-0 bg-violet-600/10 blur-[120px] rounded-full" />
-           <div className="relative p-1 rounded-[48px] bg-gradient-to-br from-white/10 to-transparent">
-             <div className="bg-[#0d1117] rounded-[44px] p-12 overflow-hidden relative">
-                <div className="absolute inset-0 bg-grid opacity-[0.05]" />
-                <motion.div 
-                  animate={{ 
-                    opacity: [0.3, 0.6, 0.3],
-                    scale: [1, 1.02, 1]
-                  }}
-                  transition={{ duration: 4, repeat: Infinity }}
-                  className="relative z-10 flex flex-col items-center gap-6"
-                >
-                  <Lock className="h-20 w-20 text-violet-500" />
-                  <div className="space-y-2 text-center">
-                    <div className="h-2 w-48 bg-white/10 rounded-full mx-auto" />
-                    <div className="h-2 w-32 bg-white/5 rounded-full mx-auto" />
-                  </div>
-                  <div className="mt-4 font-mono text-[10px] text-violet-400/50 break-all text-center">
-                    8f67e432f86d8a7b9c2e5a4f1d0c3b9a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c
-                  </div>
-                </motion.div>
-             </div>
-           </div>
-        </div>
-      </div>
+    <QuantumLayout title="Security, described plainly." subtitle="Resources">
+      <Lead>What CertGen does to protect your account and to make certificates hard to fake — and what it doesn&apos;t claim.</Lead>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {features.map((f, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="p-10 rounded-[32px] border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-all group"
-          >
-            <div className="h-12 w-12 rounded-2xl bg-white/5 flex items-center justify-center mb-8 text-violet-500 group-hover:bg-violet-600 group-hover:text-white transition-all duration-500">
-              {f.icon}
-            </div>
-            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4">{f.title}</h3>
-            <p className="text-slate-500 text-sm font-medium leading-relaxed">{f.desc}</p>
-          </motion.div>
-        ))}
-      </div>
+      <SectionHeading eyebrow="Certificates">Tamper-evident records</SectionHeading>
+      <CardGrid
+        items={[
+          { icon: <Fingerprint className="h-5 w-5" />, title: "SHA-256 fingerprints", body: "Each certificate's ID and details are hashed when the batch is exported. Any later change to the record produces a different hash." },
+          { icon: <ShieldCheck className="h-5 w-5" />, title: "Merkle proofs", body: "A batch's fingerprints are combined into a Merkle root. The verification page checks that a certificate really belongs to its batch." },
+          { icon: <MonitorSmartphone className="h-5 w-5" />, title: "Files stay with you", body: "Certificate images and PDFs are generated in your browser. We store verification records, not the finished files." },
+        ]}
+      />
+
+      <SectionHeading eyebrow="Accounts">Access control</SectionHeading>
+      <CardGrid
+        items={[
+          { icon: <KeyRound className="h-5 w-5" />, title: "Hashed passwords", body: "Passwords are hashed with bcrypt and never stored or logged in readable form. You can also sign in with Google." },
+          { icon: <UserCheck className="h-5 w-5" />, title: "Reviewed sign-ups", body: "Email addresses are confirmed and every new account is approved by an administrator before it can issue certificates." },
+          { icon: <Lock className="h-5 w-5" />, title: "Encrypted connections", body: "The site is served over HTTPS. Password reset and confirmation links are single-use and expire." },
+        ]}
+      />
+
+      <SectionHeading eyebrow="Being straightforward">What we don&apos;t claim</SectionHeading>
+      <Prose>
+        <p>
+          CertGen is an independent project. It has not been audited by a third party and holds no formal security certifications such as SOC 2 or ISO 27001. If your organisation requires those, CertGen may not be the right fit.
+        </p>
+        <p>
+          A verification page confirms that a certificate matches what was issued through CertGen. It does not vouch for the issuer&apos;s identity or for the truth of what the certificate says.
+        </p>
+        <h3>Reporting a problem</h3>
+        <p>
+          Found a vulnerability or something that looks wrong? Please <Link href="/contact">tell us</Link>, with enough detail to reproduce it. We appreciate responsible reports.
+        </p>
+      </Prose>
     </QuantumLayout>
   );
 }

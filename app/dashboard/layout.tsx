@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { Logo } from "@/components/logo";
+import { useStoredValue } from "@/lib/hooks/use-stored-value";
 
 const navItems = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard, hint: "Your activity at a glance" },
@@ -56,31 +57,18 @@ export default function DashboardLayout({
   const { setTheme, resolvedTheme } = useTheme();
 
   const isEditorWorkspace = pathname === "/dashboard/certificates";
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // Remembered between visits.
+  const [sidebarState, setSidebar] = useStoredValue("certgen:sidebar", "open");
+  const collapsed = sidebarState === "collapsed";
+  const toggleCollapsed = () => setSidebar(collapsed ? "open" : "collapsed");
 
-  // Remember the sidebar preference between visits.
-  useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem("certgen:sidebar") === "collapsed");
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    setMobileOpen(false);
-    setUserMenuOpen(false);
-  }, [pathname]);
-
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("certgen:sidebar", next ? "collapsed" : "open");
-      } catch {}
-      return next;
-    });
-  };
+  // Menus are tied to the page they were opened on, so navigating closes them.
+  const [mobileOpenAt, setMobileOpenAt] = useState<string | null>(null);
+  const [userMenuAt, setUserMenuAt] = useState<string | null>(null);
+  const mobileOpen = mobileOpenAt === pathname;
+  const userMenuOpen = userMenuAt === pathname;
+  const setMobileOpen = (open: boolean) => setMobileOpenAt(open ? pathname : null);
+  const setUserMenuOpen = (open: boolean) => setUserMenuAt(open ? pathname : null);
 
   const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
   const user = session?.user;
@@ -189,7 +177,7 @@ export default function DashboardLayout({
       <div className={`border-t border-border ${compact ? "p-2" : "p-3"}`}>
         <div className="relative">
           <button
-            onClick={() => setUserMenuOpen((v) => !v)}
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
             aria-haspopup="menu"
             aria-expanded={userMenuOpen}
             className={`flex w-full items-center gap-3 rounded-lg transition-colors hover:bg-muted ${

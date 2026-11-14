@@ -4,6 +4,7 @@ import "./globals.css";
 
 import SessionProvider from "@/components/session-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { themeInitScript } from "@/lib/theme-script";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -54,6 +55,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="font-sans">
         <SessionProvider>
           <ThemeProvider>{children}</ThemeProvider>

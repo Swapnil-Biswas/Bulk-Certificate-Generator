@@ -1,12 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo } from "react";
+import { usePrefersDark, useStoredValue } from "@/lib/hooks/use-stored-value";
 
 type Theme = "light" | "dark" | "system";
-
-interface ThemeProviderProps {
-  children: React.ReactNode;
-}
 
 interface ThemeContextType {
   theme: Theme;
@@ -16,55 +13,26 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || "light";
-    }
-    return "light";
-  });
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+const isTheme = (value: unknown): value is Theme => value === "light" || value === "dark" || value === "system";
 
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [stored, setStored] = useStoredValue("theme", "light");
+  const prefersDark = usePrefersDark();
+
+  const theme: Theme = isTheme(stored) ? stored : "light";
+  const resolvedTheme: "light" | "dark" = theme === "dark" || (theme === "system" && prefersDark) ? "dark" : "light";
+
+  // Mirror the choice onto <html>. (lib/theme-script.ts does the same before first paint.)
   useEffect(() => {
-    const root = window.document.documentElement;
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(resolvedTheme);
+    root.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme]);
 
-    const updateTheme = () => {
-      let activeTheme: "light" | "dark" = "light";
+  const value = useMemo(() => ({ theme, setTheme: setStored as (theme: Theme) => void, resolvedTheme }), [theme, setStored, resolvedTheme]);
 
-      if (theme === "system") {
-        activeTheme = mediaQuery.matches ? "dark" : "light";
-      } else {
-        activeTheme = theme as "light" | "dark";
-      }
-
-      setResolvedTheme(activeTheme);
-      root.classList.remove("light", "dark");
-      root.classList.add(activeTheme);
-      
-      // Update color scheme for browser elements
-      root.style.colorScheme = activeTheme;
-    };
-
-    updateTheme();
-    localStorage.setItem("theme", theme);
-
-    if (theme === "system") {
-      mediaQuery.addEventListener("change", updateTheme);
-      return () => mediaQuery.removeEventListener("change", updateTheme);
-    }
-  }, [theme]);
-
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-  };
-
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

@@ -1,169 +1,96 @@
 "use client";
 
-import { QuantumLayout } from "@/components/quantum-layout";
-import { motion } from "framer-motion";
 import { useState } from "react";
-import { Send, MessageSquare, Mail, ShieldCheck } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+
+import { QuantumLayout } from "@/components/quantum-layout";
+import { Field, Notice, SubmitButton } from "@/components/auth/fields";
 
 export default function ContactPage() {
-  const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    subject: "",
-    message: ""
-  });
+  const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setStatus("sending");
-
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(form),
       });
-
-      if (res.ok) {
-        setStatus("success");
-        setFormData({ name: "", email: "", subject: "", message: "" });
-      } else {
-        setStatus("error");
-      }
-    } catch (err) {
-      setStatus("error");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setSent(true);
+      else setError(typeof data.error === "string" ? data.error : "Your message couldn't be sent. Please try again.");
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <QuantumLayout 
-      title="CONTACT SUPPORT" 
-      subtitle="COMMUNICATION NODE 04"
-    >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-24 items-start">
-        <motion.div 
-          initial={{ opacity: 0, x: -30 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-12"
-        >
-          <div>
-            <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-6">TRANSMIT YOUR INQUIRY.</h2>
-            <p className="text-slate-500 font-medium leading-relaxed">
-              Our support infrastructure is available for specialized integration requests, 
-              security audits, and enterprise-grade deployment consultations.
-            </p>
-          </div>
+    <QuantumLayout title="Get in touch." subtitle="Contact">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div className="space-y-6 text-lg leading-relaxed text-[var(--mk-muted)]">
+          <p>Questions about CertGen, trouble with your account, or a certificate that needs correcting — send a message and we&apos;ll reply by email.</p>
+          <ul className="space-y-3 text-base">
+            <li><span className="font-medium text-white">Waiting for approval?</span> Mention the email address you signed up with.</li>
+            <li><span className="font-medium text-white">Problem with a certificate?</span> Include its ID or verification link.</li>
+            <li><span className="font-medium text-white">Found a bug?</span> Tell us what you did and what happened.</li>
+          </ul>
+        </div>
 
-          <div className="space-y-8">
-            {[
-              { icon: <Mail className="h-5 w-5" />, title: "Direct Registry", desc: "support@certificategenerator.space" },
-              { icon: <MessageSquare className="h-5 w-5" />, title: "Live Protocol", desc: "Available for Enterprise Nodes" },
-              { icon: <ShieldCheck className="h-5 w-5" />, title: "Security Node", desc: "security@certificategenerator.space" }
-            ].map((item, i) => (
-              <div key={i} className="flex gap-6 items-start">
-                <div className="h-10 w-10 rounded-xl bg-violet-600/10 flex items-center justify-center text-violet-500 shrink-0">
-                  {item.icon}
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{item.title}</h4>
-                  <p className="text-sm font-bold text-slate-500">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, x: 30 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="p-8 md:p-12 rounded-[40px] border border-white/5 bg-white/[0.02] backdrop-blur-xl shadow-2xl relative"
-        >
-          {status === "success" ? (
-            <div className="py-24 text-center animate-in zoom-in-95 duration-500">
-              <div className="h-20 w-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8 border border-emerald-500/20">
-                <Send className="h-8 w-8" />
-              </div>
-              <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-4">Transmission Success</h3>
-              <p className="text-slate-500 font-medium">Your inquiry has been encrypted and sent to the support node.</p>
-              <button 
-                onClick={() => setStatus("idle")}
-                className="mt-12 px-8 py-4 bg-white/5 text-white rounded-xl font-black text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition"
+        <div className="rounded-3xl border border-white/[0.09] bg-[#0d0d14]/80 p-7 sm:p-9">
+          {sent ? (
+            <div className="py-6 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                <CheckCircle2 className="h-6 w-6" />
+              </span>
+              <h2 className="mt-5 text-xl font-semibold text-white">Message sent</h2>
+              <p className="mt-2 text-[var(--mk-muted)]">Thanks, {form.name.split(" ")[0] || "there"}. We&apos;ll reply to {form.email}.</p>
+              <button
+                onClick={() => {
+                  setSent(false);
+                  setForm((prev) => ({ ...prev, subject: "", message: "" }));
+                }}
+                className="mt-6 text-sm font-medium text-white underline decoration-white/30 underline-offset-4 hover:decoration-white"
               >
-                Send Another Message
+                Send another message
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Identity Name</label>
-                  <input 
-                    required
-                    type="text" 
-                    placeholder="e.g. Alexander Pierce"
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="w-full h-14 rounded-2xl bg-white/[0.03] border border-white/10 px-6 text-sm text-white placeholder:text-slate-700 focus:outline-none focus:border-violet-500/50 transition-colors font-medium"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Email Protocol</label>
-                  <input 
-                    required
-                    type="email" 
-                    placeholder="e.g. alex@enterprise.io"
-                    value={formData.email}
-                    onChange={e => setFormData({...formData, email: e.target.value})}
-                    className="w-full h-14 rounded-2xl bg-white/[0.03] border border-white/10 px-6 text-sm text-white placeholder:text-slate-700 focus:outline-none focus:border-violet-500/50 transition-colors font-medium"
-                  />
-                </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && <Notice tone="error">{error}</Notice>}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Your name" autoComplete="name" required maxLength={120} value={form.name} onChange={set("name")} />
+                <Field label="Email" type="email" autoComplete="email" required value={form.email} onChange={set("email")} placeholder="you@example.com" />
               </div>
-
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Subject Header</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Enterprise License Query"
-                  value={formData.subject}
-                  onChange={e => setFormData({...formData, subject: e.target.value})}
-                  className="w-full h-14 rounded-2xl bg-white/[0.03] border border-white/10 px-6 text-sm text-white placeholder:text-slate-700 focus:outline-none focus:border-violet-500/50 transition-colors font-medium"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Transmission Data</label>
-                <textarea 
+              <Field label="Subject" maxLength={200} value={form.subject} onChange={set("subject")} placeholder="What is this about?" />
+              <div>
+                <label htmlFor="contact-message" className="mb-1.5 block text-sm font-medium text-white/85">
+                  Message
+                </label>
+                <textarea
+                  id="contact-message"
                   required
                   rows={6}
-                  placeholder="Describe your inquiry with technical detail..."
-                  value={formData.message}
-                  onChange={e => setFormData({...formData, message: e.target.value})}
-                  className="w-full rounded-2xl bg-white/[0.03] border border-white/10 p-6 text-sm text-white placeholder:text-slate-700 focus:outline-none focus:border-violet-500/50 transition-colors font-medium resize-none"
+                  maxLength={5000}
+                  value={form.message}
+                  onChange={set("message")}
+                  className="w-full resize-y rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-[15px] text-white placeholder:text-white/30 transition focus:border-violet-400/70 focus:bg-white/[0.06] focus:outline-none focus:ring-4 focus:ring-violet-500/15"
                 />
               </div>
-
-              <button 
-                type="submit"
-                disabled={status === "sending"}
-                className="w-full h-16 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all shadow-xl shadow-violet-600/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-4"
-              >
-                {status === "sending" ? "Encrypting..." : (
-                  <>
-                    <span>Execute Transmission</span>
-                    <Send className="h-4 w-4" />
-                  </>
-                )}
-              </button>
-              
-              {status === "error" && (
-                <p className="text-center text-[10px] font-bold text-rose-500 uppercase tracking-widest">
-                  Transmission failed. Please verify connection and retry.
-                </p>
-              )}
+              <SubmitButton loading={loading}>Send message</SubmitButton>
             </form>
           )}
-        </motion.div>
+        </div>
       </div>
     </QuantumLayout>
   );
